@@ -1,0 +1,261 @@
+@import "tailwindcss";
+
+@theme {
+  /* Xavier Collection — design tokens */
+  --color-void: #030303;
+  --color-surface: #080808;
+  --color-surface-2: #0b0b0b;
+
+  --color-gold: #c8a45d;
+  --color-gold-bright: #d8ba72;
+  --color-gold-warm: #e5cd94;
+  --color-champagne: #e9dcb8;
+
+  --color-ink: #f4f1ea;
+  --color-ink-muted: #8e8e8e;
+  --color-ink-faint: #5f5f5f;
+
+  --font-display: var(--font-bodoni);
+  --font-sans: var(--font-archivo);
+
+  --ease-xavier: cubic-bezier(0.22, 1, 0.36, 1);
+
+  --space-section: clamp(5.5rem, 12vw, 11rem);
+  --container-xc: 1280px;
+  --container-wide: 1680px;
+}
+
+html {
+  background: var(--color-void);
+  color-scheme: dark;
+  overflow-x: clip;
+  scroll-padding-top: 5.5rem;
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--color-void);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow-x: clip;
+  min-height: 100%;
+}
+
+::selection {
+  background: var(--color-gold);
+  color: var(--color-void);
+}
+
+/* Slim, understated scrollbar so it never competes with the campaign feel */
+::-webkit-scrollbar {
+  width: 5px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-void);
+}
+::-webkit-scrollbar-thumb {
+  background: #1d1c1a;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-gold);
+}
+
+.text-balance {
+  text-wrap: balance;
+}
+
+/* ---------- Xavier editorial primitives ---------- */
+
+.xc-container {
+  width: 100%;
+  max-width: var(--container-xc);
+  margin-inline: auto;
+  padding-inline: clamp(1.25rem, 5vw, 4rem);
+}
+
+.xc-wide {
+  max-width: var(--container-wide);
+}
+
+.xc-section {
+  padding-block: var(--space-section);
+}
+
+.eyebrow {
+  font-size: 0.625rem;
+  letter-spacing: 0.42em;
+  text-transform: uppercase;
+  color: var(--color-gold);
+}
+
+/* Hairline gold rule used sparingly as a section accent */
+.rule-gold {
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--color-gold) 50%,
+    transparent
+  );
+}
+
+/* Hairline neutral rule */
+.rule-thin {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(244, 241, 234, 0.14) 50%, transparent);
+}
+
+/* Editorial underline link — gold line sweeps in from the right */
+.link-xc {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.6875rem;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--color-ink);
+  transition: color 0.4s var(--ease-xavier);
+}
+.link-xc::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: -5px;
+  height: 1px;
+  width: 100%;
+  background: var(--color-gold);
+  transform: scaleX(0);
+  transform-origin: right;
+  transition: transform 0.55s var(--ease-xavier);
+}
+.link-xc:hover {
+  color: var(--color-gold);
+}
+.link-xc:hover::after {
+  transform: scaleX(1);
+  transform-origin: left;
+}
+.link-xc .arrow {
+  transition: transform 0.4s var(--ease-xavier);
+}
+.link-xc:hover .arrow {
+  transform: translateX(4px);
+}
+
+/* Discreet outline CTA — not a pill, an editorial frame */
+.btn-xc {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  border: 1px solid rgba(200, 164, 93, 0.35);
+  padding: 0.9rem 1.75rem;
+  font-size: 0.625rem;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--color-ink);
+  transition:
+    border-color 0.4s var(--ease-xavier),
+    color 0.4s var(--ease-xavier),
+    background-color 0.4s var(--ease-xavier);
+}
+.btn-xc:hover {
+  border-color: var(--color-gold);
+  color: var(--color-gold);
+}
+.btn-xc .arrow {
+  transition: transform 0.4s var(--ease-xavier);
+}
+.btn-xc:hover .arrow {
+  transform: translateX(4px);
+}
+.btn-xc-gold {
+  border-color: var(--color-gold);
+  background: var(--color-gold);
+  color: var(--color-void);
+}
+.btn-xc-gold:hover {
+  background: transparent;
+  color: var(--color-gold);
+}
+
+/* Fixed film grain — sells the editorial/cinema feel; never interactive.
+   Using a 200% fixed layer so it pan-scans with no re-tiling seams. */
+.grain-fixed {
+  position: fixed;
+  inset: -50%;
+  width: 200%;
+  height: 200%;
+  pointer-events: none;
+  z-index: 80;
+  opacity: 0.05;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Vertical latin runs for editorial margins */
+.v-text {
+  writing-mode: vertical-rl;
+  letter-spacing: 0.35em;
+}
+
+/* Header / footer navigation link — gold underline sweeps in from the right */
+.nav-link {
+  position: relative;
+  font-size: 0.6875rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--color-ink-muted);
+  transition: color 0.3s var(--ease-xavier);
+}
+.nav-link::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: -4px;
+  height: 1px;
+  width: 100%;
+  background: var(--color-gold);
+  transform: scaleX(0);
+  transform-origin: right;
+  transition: transform 0.45s var(--ease-xavier);
+}
+.nav-link:hover {
+  color: var(--color-gold);
+}
+.nav-link:hover::after {
+  transform: scaleX(1);
+  transform-origin: left;
+}
+.nav-link:focus-visible {
+  outline: 1px solid var(--color-gold);
+  outline-offset: 4px;
+}
+
+/* Hero scroll cue — a gold bead traveling down a hairline */
+@keyframes xc-scroll {
+  0% {
+    transform: translateY(-110%);
+  }
+  60% {
+    transform: translateY(120%);
+  }
+  100% {
+    transform: translateY(120%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
