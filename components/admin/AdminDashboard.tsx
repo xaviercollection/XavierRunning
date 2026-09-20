@@ -455,7 +455,17 @@ function ProductsSection({ products, query, setQuery, categoryFilter, setCategor
               <tr key={product.id} className="transition-colors hover:bg-white/[0.018]">
                 <td className="px-6 py-4"><div className="flex items-center gap-4"><ProductThumb product={product} size="small" /><div><p className="text-sm text-ink">{product.name}</p><p className="mt-1 text-[9px] tracking-[0.14em] text-ink-faint uppercase">{product.brand}</p></div></div></td>
                 <td className="px-4 py-4 text-xs text-ink-muted">{product.category}</td>
-                <td className="px-4 py-4 text-xs text-champagne">{formatStorePrice(product.price)}</td>
+                <td className="px-4 py-4">
+                  {product.originalPrice && product.originalPrice > product.price ? (
+                    <div>
+                      <p className="text-[9px] text-ink-faint line-through">{formatStorePrice(product.originalPrice)}</p>
+                      <p className="mt-0.5 text-xs text-gold">{formatStorePrice(product.price)}</p>
+                      <span className="mt-1 inline-flex bg-gold/10 px-1.5 py-0.5 text-[7px] tracking-[0.16em] text-gold uppercase">Promo</span>
+                    </div>
+                  ) : (
+                    <span className="text-xs text-champagne">{formatStorePrice(product.price)}</span>
+                  )}
+                </td>
                 <td className="px-4 py-4"><span className={`text-xs ${product.stock <= 5 ? "text-amber-300" : "text-ink-muted"}`}>{product.stock}</span></td>
                 <td className="px-4 py-4"><button type="button" onClick={() => onToggleStatus(product.id)}><StatusBadge status={product.status} /></button></td>
                 <td className="px-4 py-4"><span className={`text-lg ${product.isFeatured ? "text-gold" : "text-ink-faint"}`}>{product.isFeatured ? "★" : "☆"}</span></td>
@@ -542,6 +552,11 @@ function StoreSettingsSection({ settings, setSettings, onSave }: { settings: Sto
 
 function ProductEditor({ draft, setDraft, isNew, onClose, onSave }: { draft: AdminProduct; setDraft: (product: AdminProduct) => void; isNew: boolean; onClose: () => void; onSave: () => void }) {
   function update<K extends keyof AdminProduct>(key: K, value: AdminProduct[K]) { setDraft({ ...draft, [key]: value }); }
+  const promotionEnabled = draft.originalPrice !== undefined;
+  const promotionInvalid = promotionEnabled && draft.originalPrice! <= draft.price;
+  const discount = promotionEnabled && !promotionInvalid
+    ? Math.round((1 - draft.price / draft.originalPrice!) * 100)
+    : 0;
   return (
     <div className="fixed inset-0 z-[90] bg-black/70 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label={isNew ? "Novo produto" : `Editar ${draft.name}`}>
       <button type="button" className="absolute inset-0 cursor-default" onClick={onClose} aria-label="Fechar editor" />
@@ -553,17 +568,25 @@ function ProductEditor({ draft, setDraft, isNew, onClose, onSave }: { draft: Adm
             <AdminField label="Nome do produto" className="md:col-span-2"><input value={draft.name} onChange={(e) => update("name", e.target.value)} className="admin-input" placeholder="Nome do produto" /></AdminField>
             <AdminField label="Marca"><input value={draft.brand} onChange={(e) => update("brand", e.target.value)} className="admin-input" /></AdminField>
             <AdminField label="Categoria"><select value={draft.category} onChange={(e) => update("category", e.target.value as StoreCategory)} className="admin-select w-full">{STORE_CATEGORIES.filter((item) => item !== "Todos").map((category) => <option key={category}>{category}</option>)}</select></AdminField>
-            <AdminField label="Preço"><input type="number" min="0" step="0.01" value={draft.price} onChange={(e) => update("price", Number(e.target.value))} className="admin-input" /></AdminField>
+            <AdminField label="Preço de venda"><input type="number" min="0" step="0.01" value={draft.price} onChange={(e) => update("price", Number(e.target.value))} className="admin-input" /></AdminField>
             <AdminField label="Estoque"><input type="number" min="0" value={draft.stock} onChange={(e) => update("stock", Number(e.target.value))} className="admin-input" /></AdminField>
             <AdminField label="Status"><select value={draft.status} onChange={(e) => update("status", e.target.value as ProductStatus)} className="admin-select w-full"><option value="active">Publicado</option><option value="draft">Rascunho</option><option value="out-of-stock">Esgotado</option></select></AdminField>
             <AdminField label="Selo"><select value={draft.badge ?? ""} onChange={(e) => update("badge", (e.target.value || undefined) as StoreBadge | undefined)} className="admin-select w-full"><option value="">Sem selo</option><option>Novo</option><option>Últimas peças</option><option>Esgotado</option></select></AdminField>
+            <label className="flex cursor-pointer items-center justify-between border border-gold/15 bg-gold/[0.025] p-4 md:col-span-2"><div><p className="text-xs text-ink">Produto em promoção</p><p className="mt-1 text-[10px] text-ink-faint">Exibir no carrossel promocional com o preço anterior riscado</p></div><input type="checkbox" checked={promotionEnabled} onChange={(e) => update("originalPrice", e.target.checked ? Number(Math.max(draft.price * 1.2, draft.price + 1).toFixed(2)) : undefined)} className="h-4 w-4 accent-[#c8a45d]" /></label>
+            {promotionEnabled && (
+              <>
+                <AdminField label="Preço anterior"><input type="number" min={draft.price + 0.01} step="0.01" value={draft.originalPrice ?? ""} onChange={(e) => update("originalPrice", e.target.value === "" ? undefined : Number(e.target.value))} className={`admin-input ${promotionInvalid ? "border-red-400/60" : ""}`} /></AdminField>
+                <div className="flex items-center justify-between border border-white/[0.07] px-4 py-3"><div><p className="text-[8px] tracking-[0.2em] text-ink-faint uppercase">Desconto exibido</p><p className={`mt-1 font-display text-2xl ${promotionInvalid ? "text-red-300" : "text-gold"}`}>{promotionInvalid ? "Inválido" : `${discount}%`}</p></div><span className="bg-gold px-2.5 py-1.5 text-[7px] tracking-[0.2em] text-black uppercase">Em promoção</span></div>
+                {promotionInvalid && <p className="-mt-2 text-[10px] text-red-300 md:col-span-2">O preço anterior precisa ser maior que o preço de venda.</p>}
+              </>
+            )}
             <AdminField label="Tamanhos / volumes" className="md:col-span-2"><input value={draft.sizes.join(", ")} onChange={(e) => update("sizes", e.target.value.split(",").map((item) => item.trim()).filter(Boolean))} className="admin-input" placeholder="P, M, G ou 100 ml" /></AdminField>
             <AdminField label="Caminho da imagem" className="md:col-span-2"><input value={draft.image} onChange={(e) => update("image", e.target.value)} className="admin-input" /></AdminField>
             <AdminField label="Descrição" className="md:col-span-2"><textarea value={draft.description} onChange={(e) => update("description", e.target.value)} className="admin-textarea" rows={4} /></AdminField>
             <label className="flex cursor-pointer items-center justify-between border border-white/[0.07] p-4 md:col-span-2"><div><p className="text-xs text-ink">Produto em destaque</p><p className="mt-1 text-[10px] text-ink-faint">Exibir com prioridade na vitrine</p></div><input type="checkbox" checked={draft.isFeatured} onChange={(e) => update("isFeatured", e.target.checked)} className="h-4 w-4 accent-[#c8a45d]" /></label>
           </div>
         </div>
-        <div className="flex justify-end gap-3 border-t border-white/[0.07] p-5"><button type="button" onClick={onClose} className="admin-button-secondary">Cancelar</button><button type="button" onClick={onSave} disabled={!draft.name.trim() || !draft.brand.trim()} className="admin-button-primary disabled:cursor-not-allowed disabled:opacity-40">{isNew ? "Criar produto" : "Salvar alterações"}</button></div>
+        <div className="flex justify-end gap-3 border-t border-white/[0.07] p-5"><button type="button" onClick={onClose} className="admin-button-secondary">Cancelar</button><button type="button" onClick={onSave} disabled={!draft.name.trim() || !draft.brand.trim() || promotionInvalid} className="admin-button-primary disabled:cursor-not-allowed disabled:opacity-40">{isNew ? "Criar produto" : "Salvar alterações"}</button></div>
       </aside>
     </div>
   );
