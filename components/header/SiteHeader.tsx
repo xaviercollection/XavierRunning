@@ -3,10 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 
 const NAV_LINKS = [
-  { label: "Novidades", href: "#colecao" },
-  { label: "Masculino", href: "#colecao" },
+  { label: "Novidades", href: "#colecao-roupas" },
+  { label: "Masculino", href: "#colecao-roupas" },
   { label: "Perfumes", href: "#fragrancias" },
-  { label: "Marcas", href: "#marcas" },
   { label: "Contato", href: "#contato" },
 ];
 
@@ -76,16 +75,8 @@ export function SiteHeader() {
         </a>
 
         <div className="flex items-center gap-6 lg:gap-9">
-          <nav aria-label="Principal" className="hidden items-center gap-6 md:flex lg:gap-8">
-            {NAV_LINKS.map((link) => (
-              <a key={link.label} href={link.href} className="nav-link">
-                {link.label}
-              </a>
-            ))}
-          </nav>
-
           <a
-            href="#vitrine"
+            href="/loja"
             aria-label="Explorar a loja"
             className="hidden h-9 w-9 items-center justify-center text-ink-muted transition-colors duration-300 hover:text-gold md:flex"
           >
@@ -150,7 +141,7 @@ export function SiteHeader() {
               </a>
             ))}
             <a
-              href="#vitrine"
+              href="/loja"
               onClick={() => setMenuOpen(false)}
               className="link-xc mt-8 self-start"
             >

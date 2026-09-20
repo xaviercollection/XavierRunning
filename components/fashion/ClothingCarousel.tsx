@@ -1,399 +1,310 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useRef, useState, useCallback, type CSSProperties } from "react";
-import { useReducedMotion } from "@/lib/useReducedMotion";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { AnimeSplitTitle } from "@/components/ui/AnimeSplitTitle";
 import type { ClothingItem } from "@/lib/clothingCatalog";
-import { SplitTitle } from "@/components/ui/SplitTitle";
+import { useReducedMotion } from "@/lib/useReducedMotion";
 
 interface ClothingCarouselProps {
-    items: ClothingItem[];
-    id?: string;
+  items: ClothingItem[];
+  id?: string;
 }
 
-const AUTOPLAY_INTERVAL = 6000;
+const AUTOPLAY_INTERVAL = 5600;
 const AUTOPLAY_RESUME_DELAY = 5000;
 const SWIPE_THRESHOLD = 44;
 
-/** How many cards are visible at each breakpoint */
-function getVisible(): number {
-    if (typeof window === "undefined") return 3;
-    if (window.innerWidth >= 1024) return 3;
-    if (window.innerWidth >= 640) return 2;
-    return 1;
+function wrapIndex(index: number, total: number) {
+  return ((index % total) + total) % total;
+}
+
+function getCircularPosition(index: number, activeIndex: number, total: number) {
+  let position = index - activeIndex;
+  if (position > total / 2) position -= total;
+  if (position < -total / 2) position += total;
+  return position;
 }
 
 export function ClothingCarousel({ items, id }: ClothingCarouselProps) {
-    const reducedMotion = useReducedMotion();
-    const total = items.length;
+  const reducedMotion = useReducedMotion();
+  const total = items.length;
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [inViewport, setInViewport] = useState(false);
+  const [hoverPaused, setHoverPaused] = useState(false);
+  const [interactionPaused, setInteractionPaused] = useState(false);
+  const sectionRef = useRef<HTMLElement | null>(null);
+  const touchRef = useRef<{ x: number; y: number; intent: "horizontal" | "vertical" | null } | null>(null);
+  const resumeTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
-    // `offset` = index of the leftmost visible card
-    const [offset, setOffset] = useState(0);
-    const [visible, setVisible] = useState(3);
-    const [inViewport, setInViewport] = useState(false);
-    const [hoverPaused, setHoverPaused] = useState(false);
-    const [interactionPaused, setInteractionPaused] = useState(false);
-    // highlighted card within the visible window (0..visible-1)
-    const [focusedLocal, setFocusedLocal] = useState(0);
+  const pauseAutoplay = useCallback(() => {
+    setInteractionPaused(true);
+    clearTimeout(resumeTimerRef.current);
+    resumeTimerRef.current = setTimeout(() => setInteractionPaused(false), AUTOPLAY_RESUME_DELAY);
+  }, []);
 
-    const sectionRef = useRef<HTMLElement | null>(null);
-    const trackRef = useRef<HTMLDivElement | null>(null);
-    const touchRef = useRef<{ x: number; y: number; intent: "horizontal" | "vertical" | null } | null>(null);
-    const resumeTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const moveTo = useCallback(
+    (nextIndex: number) => {
+      if (!total) return;
+      pauseAutoplay();
+      setActiveIndex(wrapIndex(nextIndex, total));
+    },
+    [pauseAutoplay, total],
+  );
 
-    // Sync visible count on resize
-    useEffect(() => {
-        const update = () => setVisible(getVisible());
-        update();
-        window.addEventListener("resize", update);
-        return () => window.removeEventListener("resize", update);
-    }, []);
+  const goPrev = useCallback(() => moveTo(activeIndex - 1), [activeIndex, moveTo]);
+  const goNext = useCallback(() => moveTo(activeIndex + 1), [activeIndex, moveTo]);
 
-    // When visible count changes, clamp offset + reset focus
-    useEffect(() => {
-        setOffset((o) => Math.min(o, Math.max(0, total - visible)));
-        setFocusedLocal(0);
-    }, [visible, total]);
+  useEffect(() => {
+    const section = sectionRef.current;
+    if (!section) return;
 
-    const maxOffset = Math.max(0, total - visible);
+    const observer = new IntersectionObserver(([entry]) => setInViewport(entry.isIntersecting), {
+      threshold: 0.2,
+    });
+    observer.observe(section);
+    return () => observer.disconnect();
+  }, []);
 
-    const pauseAutoplay = useCallback(() => {
-        setInteractionPaused(true);
-        clearTimeout(resumeTimerRef.current);
-        resumeTimerRef.current = setTimeout(() => setInteractionPaused(false), AUTOPLAY_RESUME_DELAY);
-    }, []);
+  useEffect(() => {
+    if (reducedMotion || !inViewport || hoverPaused || interactionPaused || total <= 1) return;
 
-    const goNext = useCallback(() => {
-        pauseAutoplay();
-        setOffset((o) => {
-            if (o >= maxOffset) return 0; // wrap
-            return o + 1;
-        });
-        setFocusedLocal(0);
-    }, [pauseAutoplay, maxOffset]);
+    const timer = window.setInterval(() => {
+      setActiveIndex((index) => wrapIndex(index + 1, total));
+    }, AUTOPLAY_INTERVAL);
 
-    const goPrev = useCallback(() => {
-        pauseAutoplay();
-        setOffset((o) => {
-            if (o <= 0) return maxOffset; // wrap
-            return o - 1;
-        });
-        setFocusedLocal(0);
-    }, [pauseAutoplay, maxOffset]);
+    return () => window.clearInterval(timer);
+  }, [hoverPaused, inViewport, interactionPaused, reducedMotion, total]);
 
-    // Intersection observer
-    useEffect(() => {
-        const section = sectionRef.current;
-        if (!section) return;
-        const observer = new IntersectionObserver(
-            ([entry]) => setInViewport(entry.isIntersecting),
-            { threshold: 0.15 },
-        );
-        observer.observe(section);
-        return () => observer.disconnect();
-    }, []);
+  useEffect(() => () => clearTimeout(resumeTimerRef.current), []);
 
-    // Arrow key nav
-    useEffect(() => {
-        if (!inViewport) return;
-        const handleKey = (e: KeyboardEvent) => {
-            if (e.key === "ArrowLeft") goPrev();
-            else if (e.key === "ArrowRight") goNext();
-        };
-        window.addEventListener("keydown", handleKey);
-        return () => window.removeEventListener("keydown", handleKey);
-    }, [inViewport, goNext, goPrev]);
+  const handleTouchStart = (event: React.TouchEvent) => {
+    const touch = event.touches[0];
+    touchRef.current = { x: touch.clientX, y: touch.clientY, intent: null };
+    pauseAutoplay();
+  };
 
-    // Autoplay
-    useEffect(() => {
-        if (reducedMotion || !inViewport || hoverPaused || interactionPaused || total <= visible) return;
-        const timer = setInterval(goNext, AUTOPLAY_INTERVAL);
-        return () => clearInterval(timer);
-    }, [reducedMotion, inViewport, hoverPaused, interactionPaused, total, visible, goNext]);
+  const handleTouchMove = (event: React.TouchEvent) => {
+    const start = touchRef.current;
+    if (!start) return;
 
-    useEffect(() => () => clearTimeout(resumeTimerRef.current), []);
+    const touch = event.touches[0];
+    const deltaX = touch.clientX - start.x;
+    const deltaY = touch.clientY - start.y;
 
-    // Touch / swipe
-    const handleTouchStart = (e: React.TouchEvent) => {
-        const t = e.touches[0];
-        touchRef.current = { x: t.clientX, y: t.clientY, intent: null };
-        pauseAutoplay();
-    };
-    const handleTouchMove = (e: React.TouchEvent) => {
-        const start = touchRef.current;
-        if (!start) return;
-        const t = e.touches[0];
-        const dx = t.clientX - start.x;
-        const dy = t.clientY - start.y;
-        if (start.intent === null && (Math.abs(dx) > 8 || Math.abs(dy) > 8)) {
-            start.intent = Math.abs(dx) > Math.abs(dy) ? "horizontal" : "vertical";
-        }
-    };
-    const handleTouchEnd = (e: React.TouchEvent) => {
-        const start = touchRef.current;
-        touchRef.current = null;
-        if (!start || start.intent !== "horizontal") return;
-        const t = e.changedTouches[0];
-        const dx = t.clientX - start.x;
-        if (dx <= -SWIPE_THRESHOLD) goNext();
-        else if (dx >= SWIPE_THRESHOLD) goPrev();
-    };
+    if (start.intent === null && (Math.abs(deltaX) > 8 || Math.abs(deltaY) > 8)) {
+      start.intent = Math.abs(deltaX) > Math.abs(deltaY) ? "horizontal" : "vertical";
+    }
+  };
 
-    // The highlighted card = offset + focusedLocal, clamped to valid range
-    const highlightedIndex = Math.min(offset + focusedLocal, total - 1);
-    const highlighted = items[highlightedIndex];
+  const handleTouchEnd = (event: React.TouchEvent) => {
+    const start = touchRef.current;
+    touchRef.current = null;
+    if (!start || start.intent !== "horizontal") return;
 
-    // Progress bar: where are we in the full list?
-    const progressPct = total <= 1 ? 100 : (offset / maxOffset) * 100;
+    const deltaX = event.changedTouches[0].clientX - start.x;
+    if (deltaX <= -SWIPE_THRESHOLD) goNext();
+    if (deltaX >= SWIPE_THRESHOLD) goPrev();
+  };
 
-    return (
-        <section
-            id={id}
-            ref={sectionRef}
-            aria-label="Coleção de Roupas Xavier Collection"
-            className="relative xc-section overflow-hidden"
+  if (!total) return null;
+
+  const activeItem = items[activeIndex];
+  const progress = ((activeIndex + 1) / total) * 100;
+
+  return (
+    <section
+      id={id}
+      ref={sectionRef}
+      aria-label="Coleção de Roupas Xavier Collection"
+      className="xc-section relative overflow-hidden"
+      onKeyDown={(event) => {
+        if (event.key === "ArrowLeft") goPrev();
+        if (event.key === "ArrowRight") goNext();
+      }}
+    >
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0">
+        {items.map((item, index) => (
+          <div
+            key={item.slug}
+            className="absolute inset-0 transition-opacity duration-1000"
+            style={{ opacity: index === activeIndex ? 0.15 : 0 }}
+          >
+            <Image
+              src={item.imageSrc}
+              alt=""
+              fill
+              sizes="100vw"
+              className="scale-125 object-cover"
+              style={{
+                filter: "blur(72px) brightness(0.22) saturate(0.5) sepia(0.28)",
+                objectPosition: `${(item.focalPoint?.x ?? 0.5) * 100}% ${(item.focalPoint?.y ?? 0.5) * 100}%`,
+              }}
+            />
+          </div>
+        ))}
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_45%,transparent_0%,rgba(3,3,3,0.18)_42%,rgba(3,3,3,0.72)_100%)]" />
+      </div>
+
+      <div className="xc-container relative z-10">
+        <div className="mb-8 text-center md:mb-10">
+          <p className="eyebrow">Coleção · Selected Goods</p>
+          <AnimeSplitTitle
+            lines={["Vista sua identidade."]}
+            className="mx-auto mt-5 max-w-4xl font-display text-[clamp(2.75rem,7vw,6rem)] leading-[0.9] text-ink text-balance"
+          />
+          <p className="mx-auto mt-5 max-w-xl text-sm leading-relaxed text-ink-muted text-balance">
+            Strike, Crosby e Zara — peças escolhidas para construir presença de todos os ângulos.
+          </p>
+        </div>
+
+        <div
+          className="relative mx-[calc(50%-50vw)] overflow-hidden"
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+          onMouseEnter={() => setHoverPaused(true)}
+          onMouseLeave={() => setHoverPaused(false)}
         >
-            {/* Subtle ambience bloom from highlighted card */}
-            <div
-                aria-hidden="true"
-                className="pointer-events-none absolute inset-0 transition-opacity duration-700"
-                style={{ opacity: 0.14 }}
-            >
-                {items.map((item, i) => (
-                    <div
-                        key={item.slug}
-                        className="absolute inset-0 transition-opacity duration-700 ease-out"
-                        style={{ opacity: i === highlightedIndex ? 1 : 0 }}
-                    >
-                        <Image
-                            src={item.imageSrc}
-                            alt=""
-                            fill
-                            sizes="100vw"
-                            className="scale-[1.18] object-cover"
-                            style={{ filter: "blur(48px) brightness(0.18) saturate(0.35) sepia(0.28)" }}
-                            priority={i === 0}
-                        />
-                    </div>
-                ))}
-                {/* Edge dissolves */}
-                <div className="absolute inset-x-0 top-0 h-[clamp(6rem,16vh,12rem)] bg-gradient-to-b from-[#040302]/60 to-transparent" />
-                <div className="absolute inset-x-0 bottom-0 h-[clamp(6rem,16vh,12rem)] bg-gradient-to-t from-[#040302]/60 to-transparent" />
-            </div>
+          <div
+            className="relative h-[clamp(25rem,58vw,41rem)] w-full [perspective:1500px]"
+            style={{ touchAction: "pan-y pinch-zoom" }}
+          >
+            {items.map((item, index) => {
+              const position = getCircularPosition(index, activeIndex, total);
+              const distance = Math.abs(position);
+              const isActive = position === 0;
+              const isVisible = distance <= 1;
+              const xOffset = position * 76;
 
-            <div className="xc-container relative z-10">
-                {/* ─── Section header ─── */}
-                <div className="mb-12 flex flex-col gap-8 md:mb-16 md:flex-row md:items-end md:justify-between">
-                    <div>
-                        <p className="eyebrow">Coleção · Selected Goods</p>
-                        <SplitTitle
-                            variant="rise"
-                            text="Vista sua identidade."
-                            className="mt-5 max-w-2xl font-display text-[clamp(2.5rem,6.5vw,5.5rem)] leading-[0.95] text-ink text-balance"
-                        />
-                    </div>
-                    <div className="flex flex-col items-start gap-5 md:items-end md:text-right">
-                        <p className="max-w-sm text-sm leading-relaxed text-ink-muted text-balance">
-                            Strike, Crosby e Zara — uma seleção
-                            pensada para construir presença camada a camada.
-                        </p>
-                        {/* Prev / Next arrow buttons — desktop inline with description */}
-                        <div className="flex items-center gap-3">
-                            <button
-                                type="button"
-                                onClick={goPrev}
-                                aria-label="Peça anterior"
-                                className="flex h-9 w-9 items-center justify-center border border-white/15 text-ink transition-colors duration-300 hover:border-gold hover:text-gold"
-                            >
-                                <ArrowIcon direction="left" />
-                            </button>
-                            <button
-                                type="button"
-                                onClick={goNext}
-                                aria-label="Próxima peça"
-                                className="flex h-9 w-9 items-center justify-center border border-white/15 text-ink transition-colors duration-300 hover:border-gold hover:text-gold"
-                            >
-                                <ArrowIcon direction="right" />
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                {/* ─── Card track ─── */}
-                <div
-                    onTouchStart={handleTouchStart}
-                    onTouchMove={handleTouchMove}
-                    onTouchEnd={handleTouchEnd}
-                    onMouseEnter={() => setHoverPaused(true)}
-                    onMouseLeave={() => setHoverPaused(false)}
-                    className="overflow-hidden"
+              return (
+                <button
+                  key={item.slug}
+                  type="button"
+                  aria-label={isActive ? `${item.name}, peça selecionada` : `Selecionar ${item.name}`}
+                  aria-hidden={!isVisible}
+                  tabIndex={isVisible ? 0 : -1}
+                  onClick={() => moveTo(index)}
+                  className="group absolute left-1/2 top-[2%] aspect-[4/5] w-[clamp(16rem,36vw,29rem)] overflow-hidden rounded-[3px] border bg-[#070605] text-left [transform-style:preserve-3d] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-gold"
+                  style={{
+                    opacity: isVisible ? (isActive ? 1 : 0.48) : 0,
+                    pointerEvents: isVisible ? "auto" : "none",
+                    zIndex: isActive ? 20 : 10,
+                    borderColor: isActive ? "rgba(199,163,90,0.5)" : "rgba(255,255,255,0.08)",
+                    boxShadow: isActive
+                      ? "0 42px 95px -36px rgba(0,0,0,0.98), 0 0 70px -40px rgba(199,163,90,0.65)"
+                      : "0 26px 70px -34px rgba(0,0,0,0.95)",
+                    transform: `translate3d(calc(-50% + ${xOffset}%), ${distance * 4}%, ${distance * -170}px) rotateY(${position * -18}deg) scale(${isActive ? 1 : 0.8})`,
+                    transition: reducedMotion
+                      ? "none"
+                      : "transform 850ms cubic-bezier(0.16,1,0.3,1), opacity 650ms ease, filter 650ms ease, border-color 650ms ease, box-shadow 650ms ease",
+                    filter: isActive ? "brightness(1) saturate(1)" : "brightness(0.48) saturate(0.72)",
+                  }}
                 >
-                    {/* Sliding rail — translates by one card-width per step */}
-                    <div
-                        ref={trackRef}
-                        className="flex gap-[clamp(1rem,2.5vw,1.75rem)]"
-                        style={{
-                            // Each card is (100% - gaps) / visible wide; rail shifts by card+gap per offset step
-                            transform: `translateX(calc((100% / ${visible} + clamp(1rem, 2.5vw, 1.75rem)) * -${offset}))`,
-                            transition: reducedMotion ? "none" : "transform 700ms cubic-bezier(0.16,1,0.3,1)",
-                        }}
-                    >
-                        {items.map((item, i) => {
-                            const localIdx = i - offset;
-                            const isVisible = localIdx >= 0 && localIdx < visible;
-                            const isFocused = i === highlightedIndex;
+                  <Image
+                    src={item.imageSrc}
+                    alt={`${item.name} — ${item.brand}`}
+                    fill
+                    sizes="(min-width: 1024px) 29rem, 72vw"
+                    priority={index < 3}
+                    className="object-cover transition-transform duration-[1400ms] ease-out group-hover:scale-[1.025]"
+                    style={{
+                      objectPosition: `${(item.focalPoint?.x ?? 0.5) * 100}% ${(item.focalPoint?.y ?? 0.5) * 100}%`,
+                    }}
+                  />
 
-                            return (
-                                <div
-                                    key={item.slug}
-                                    className="flex-none"
-                                    style={{
-                                        width: `calc((100% - clamp(1rem, 2.5vw, 1.75rem) * ${visible - 1}) / ${visible})`,
-                                    }}
-                                >
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            if (isVisible) {
-                                                setFocusedLocal(localIdx);
-                                                pauseAutoplay();
-                                            }
-                                        }}
-                                        className="group block w-full cursor-pointer text-left focus-visible:outline-none"
-                                        aria-label={`Destacar ${item.name}`}
-                                    >
-                                        {/* Photo card */}
-                                        <div
-                                            className="relative aspect-[3/4] w-full overflow-hidden rounded-[2px] transition-all duration-500"
-                                            style={{
-                                                borderWidth: "1px",
-                                                borderStyle: "solid",
-                                                borderColor: isFocused
-                                                    ? "rgba(200,164,93,0.55)"
-                                                    : "rgba(255,255,255,0.08)",
-                                                boxShadow: isFocused
-                                                    ? "0 0 0 1px rgba(200,164,93,0.12), 0 24px 60px -20px rgba(0,0,0,0.8)"
-                                                    : "0 8px 32px -12px rgba(0,0,0,0.6)",
-                                            }}
-                                        >
-                                            <Image
-                                                src={item.imageSrc}
-                                                alt={`${item.name} — ${item.brand}`}
-                                                fill
-                                                sizes={`(min-width: 1024px) 30vw, (min-width: 640px) 46vw, 92vw`}
-                                                className="object-cover transition-transform duration-[1200ms] ease-out group-hover:scale-[1.03]"
-                                                style={{
-                                                    objectPosition: `${(item.focalPoint?.x ?? 0.5) * 100}% ${(item.focalPoint?.y ?? 0.5) * 100}%`,
-                                                    filter: isFocused ? "none" : "brightness(0.82)",
-                                                    transition: "filter 600ms ease",
-                                                }}
-                                                priority={i < 3}
-                                            />
+                  <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/75 via-black/5 to-black/15" />
+                  <span
+                    className="absolute left-5 top-5 text-[9px] tracking-[0.32em] uppercase"
+                    style={{ color: isActive ? "var(--color-gold)" : "var(--color-ink-faint)" }}
+                  >
+                    {String(index + 1).padStart(2, "0")} · {item.brand}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
 
-                                            {/* Index badge */}
-                                            <span
-                                                aria-hidden="true"
-                                                className="absolute left-4 top-4 flex h-8 w-8 items-center justify-center border bg-black/40 font-display text-[10px] tracking-widest transition-colors duration-300"
-                                                style={{
-                                                    borderColor: isFocused ? "rgba(200,164,93,0.5)" : "rgba(255,255,255,0.1)",
-                                                    color: isFocused ? "var(--color-gold)" : "var(--color-ink-faint)",
-                                                }}
-                                            >
-                                                {String(i + 1).padStart(2, "0")}
-                                            </span>
+          <div className="relative z-30 mx-auto -mt-[clamp(2rem,5vw,4rem)] grid max-w-4xl grid-cols-[3rem_1fr_3rem] items-center gap-4 px-4 md:grid-cols-[4rem_1fr_4rem] md:gap-8">
+            <button
+              type="button"
+              onClick={goPrev}
+              aria-label="Peça anterior"
+              className="flex h-12 w-12 items-center justify-center rounded-full border border-white/15 bg-black/35 text-ink transition-all duration-300 hover:border-gold/70 hover:text-gold md:h-14 md:w-14"
+            >
+              <ArrowIcon direction="left" />
+            </button>
 
-                                            {/* Bottom scrim + info */}
-                                            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-
-                                            <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 px-4 pb-5 md:px-5 md:pb-6">
-                                                <p
-                                                    className="text-[9px] tracking-[0.38em] uppercase transition-colors duration-500"
-                                                    style={{ color: isFocused ? "var(--color-gold)" : "var(--color-ink-faint)" }}
-                                                >
-                                                    {item.brand}
-                                                </p>
-                                                <h3 className="mt-1 font-display text-base leading-[0.95] text-ink md:text-lg">
-                                                    {item.name}
-                                                </h3>
-                                                {item.price && (
-                                                    <span className="mt-1 block font-display text-sm text-gold">{item.price}</span>
-                                                )}
-                                            </div>
-                                        </div>
-
-                                        {/* Below-card label */}
-                                        <div className="mt-4 flex items-center justify-between gap-4">
-                                            <p className="text-[10px] tracking-[0.25em] text-ink-muted uppercase transition-colors duration-300 group-hover:text-gold">
-                                                {item.tagline}
-                                            </p>
-                                            <span
-                                                aria-hidden="true"
-                                                className="text-[10px] tracking-[0.2em] text-ink-muted uppercase transition-all duration-300 group-hover:translate-x-1 group-hover:text-gold"
-                                            >
-                                                →
-                                            </span>
-                                        </div>
-                                    </button>
-                                </div>
-                            );
-                        })}
-                    </div>
-                </div>
-
-                {/* ─── Progress bar + item count ─── */}
-                <div className="mt-10 flex items-center gap-6">
-                    {/* Thin progress rail */}
-                    <div className="relative h-px flex-1 bg-white/8">
-                        <div
-                            className="absolute inset-y-0 left-0 bg-gold transition-all duration-700 ease-out"
-                            style={{ width: `${progressPct}%` }}
-                        />
-                    </div>
-
-                    {/* Counter */}
-                    <span className="whitespace-nowrap font-display text-xs tabular-nums text-ink-faint">
-                        <span className="text-gold">{String(highlightedIndex + 1).padStart(2, "0")}</span>
-                        {" / "}
-                        {String(total).padStart(2, "0")}
-                    </span>
-
-                    {/* Mobile-only arrow buttons (desktop arrows are in the header row) */}
-                    <div className="flex items-center gap-2 md:hidden">
-                        <button
-                            type="button"
-                            onClick={goPrev}
-                            aria-label="Peça anterior"
-                            className="flex h-8 w-8 items-center justify-center border border-white/15 text-ink transition-colors duration-300 hover:border-gold hover:text-gold"
-                        >
-                            <ArrowIcon direction="left" />
-                        </button>
-                        <button
-                            type="button"
-                            onClick={goNext}
-                            aria-label="Próxima peça"
-                            className="flex h-8 w-8 items-center justify-center border border-white/15 text-ink transition-colors duration-300 hover:border-gold hover:text-gold"
-                        >
-                            <ArrowIcon direction="right" />
-                        </button>
-                    </div>
-                </div>
+            <div
+              key={activeItem.slug}
+              className="min-w-0 text-center"
+              style={{ animation: reducedMotion ? undefined : "clothing-copy-in 650ms cubic-bezier(0.16,1,0.3,1) both" }}
+            >
+              <h3 className="font-display text-[clamp(1.9rem,4.8vw,3.8rem)] leading-none text-ink">
+                {activeItem.brand}
+              </h3>
             </div>
-        </section>
-    );
+
+            <button
+              type="button"
+              onClick={goNext}
+              aria-label="Próxima peça"
+              className="flex h-12 w-12 items-center justify-center rounded-full border border-white/15 bg-black/35 text-ink transition-all duration-300 hover:border-gold/70 hover:text-gold md:h-14 md:w-14"
+            >
+              <ArrowIcon direction="right" />
+            </button>
+          </div>
+
+          <div className="mx-auto mt-8 flex max-w-xl items-center gap-5 px-6">
+            <span className="font-display text-xs tabular-nums text-gold">
+              {String(activeIndex + 1).padStart(2, "0")}
+            </span>
+            <div className="relative h-px flex-1 overflow-hidden bg-white/10">
+              <div
+                className="absolute inset-y-0 left-0 bg-gold"
+                style={{
+                  width: `${progress}%`,
+                  transition: reducedMotion ? "none" : "width 700ms cubic-bezier(0.16,1,0.3,1)",
+                }}
+              />
+            </div>
+            <span className="font-display text-xs tabular-nums text-ink-faint">
+              {String(total).padStart(2, "0")}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <style jsx>{`
+        @keyframes clothing-copy-in {
+          from {
+            opacity: 0;
+            transform: translateY(14px);
+            filter: blur(6px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+            filter: blur(0);
+          }
+        }
+      `}</style>
+    </section>
+  );
 }
 
 function ArrowIcon({ direction }: { direction: "left" | "right" }) {
-    return (
-        <svg
-            viewBox="0 0 24 24"
-            width={15}
-            height={15}
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={1.5}
-            aria-hidden="true"
-        >
-            {direction === "left" ? <path d="M15 5l-7 7 7 7" /> : <path d="M9 5l7 7-7 7" />}
-        </svg>
-    );
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={17}
+      height={17}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.4}
+      aria-hidden="true"
+    >
+      {direction === "left" ? <path d="M15 5l-7 7 7 7" /> : <path d="M9 5l7 7-7 7" />}
+    </svg>
+  );
 }

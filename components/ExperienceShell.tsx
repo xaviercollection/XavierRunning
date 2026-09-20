@@ -4,13 +4,11 @@ import { useCallback, useState, type ReactNode } from "react";
 import { LoaderScreen } from "@/components/loader/LoaderScreen";
 import { SiteHeader } from "@/components/header/SiteHeader";
 import { HeroSection } from "@/components/hero/HeroSection";
-import { PerfumeCoverflowCarousel } from "@/components/ui/perfume-coverflow-carousel";
 import { GlobalBackground } from "@/components/background/GlobalBackground";
-import { BrandStrip } from "@/components/brands/PartnerBrands";
+import { ArabicPerfumeScroll } from "@/components/perfumes/ArabicPerfumeScroll";
 import { SeamBloom } from "@/components/ui/SeamBloom";
 import { ClothingCarousel } from "@/components/fashion/ClothingCarousel";
 import { StoreLocation } from "@/components/store/StoreLocation";
-import { carouselPerfumes } from "@/lib/perfumeCatalog";
 import { carouselClothing } from "@/lib/clothingCatalog";
 
 interface ExperienceShellProps {
@@ -48,7 +46,7 @@ export function ExperienceShell({ storeShowcase, footer }: ExperienceShellProps)
         />
       )}
 
-      <div className="relative z-10 w-full overflow-hidden">
+      <div className="relative z-10 w-full overflow-x-clip">
         <SiteHeader />
 
         <main>
@@ -59,15 +57,11 @@ export function ExperienceShell({ storeShowcase, footer }: ExperienceShellProps)
 
           <SeamBloom />
 
-          <PerfumeCoverflowCarousel id="fragrancias" perfumes={carouselPerfumes} />
+          <ArabicPerfumeScroll />
 
           <SeamBloom />
 
           <ClothingCarousel id="colecao-roupas" items={carouselClothing} />
-
-          <SeamBloom />
-
-          <BrandStrip />
 
           <SeamBloom />
 

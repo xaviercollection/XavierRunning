@@ -4,7 +4,7 @@ import path from "node:path";
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   images: {
-    formats: ["image/webp"],
+    formats: ["image/avif", "image/webp"],
   },
   turbopack: {
     root: path.join(__dirname),

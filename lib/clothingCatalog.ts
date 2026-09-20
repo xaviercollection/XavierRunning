@@ -20,7 +20,7 @@ export const carouselClothing: ClothingItem[] = [
         tagline: "Alfaiataria que dita o tom.",
         price: "R$ 499,90",
         cta: "Ver peça",
-        imageSrc: "/images/roupas/crosby/Captura de tela 2026-09-17 145623.png",
+        imageSrc: "/images/roupas/crosby/Captura de tela 2026-09-17 145623.webp",
         focalPoint: { x: 0.5, y: 0.4 },
     },
     {
@@ -31,7 +31,7 @@ export const carouselClothing: ClothingItem[] = [
         tagline: "Presença sem excessos.",
         price: "R$ 529,90",
         cta: "Ver peça",
-        imageSrc: "/images/roupas/crosby/Captura de tela 2026-09-17 145643.png",
+        imageSrc: "/images/roupas/crosby/Captura de tela 2026-09-17 145643.webp",
         focalPoint: { x: 0.5, y: 0.4 },
     },
     {
@@ -42,7 +42,7 @@ export const carouselClothing: ClothingItem[] = [
         tagline: "O estilo que te define.",
         price: "R$ 479,90",
         cta: "Ver peça",
-        imageSrc: "/images/roupas/crosby/Captura de tela 2026-09-17 145714.png",
+        imageSrc: "/images/roupas/crosby/Captura de tela 2026-09-17 145714.webp",
         focalPoint: { x: 0.5, y: 0.4 },
     },
     // Strike
@@ -54,7 +54,7 @@ export const carouselClothing: ClothingItem[] = [
         tagline: "Estampa autoral, presença de rua.",
         price: "R$ 189,90",
         cta: "Ver peça",
-        imageSrc: "/images/roupas/strike/images.jpeg",
+        imageSrc: "/images/roupas/strike/images.webp",
         focalPoint: { x: 0.5, y: 0.4 },
     },
     {
@@ -88,7 +88,7 @@ export const carouselClothing: ClothingItem[] = [
         tagline: "Moda contemporânea.",
         price: "R$ 299,90",
         cta: "Ver peça",
-        imageSrc: "/images/roupas/zara/Captura de tela 2026-09-17 144308.png",
+        imageSrc: "/images/roupas/zara/Captura de tela 2026-09-17 144308.webp",
         focalPoint: { x: 0.5, y: 0.4 },
     },
     {
@@ -99,7 +99,7 @@ export const carouselClothing: ClothingItem[] = [
         tagline: "Estilo inconfundível.",
         price: "R$ 319,90",
         cta: "Ver peça",
-        imageSrc: "/images/roupas/zara/Captura de tela 2026-09-17 144357.png",
+        imageSrc: "/images/roupas/zara/Captura de tela 2026-09-17 144357.webp",
         focalPoint: { x: 0.5, y: 0.4 },
     },
     {
@@ -110,7 +110,7 @@ export const carouselClothing: ClothingItem[] = [
         tagline: "Elegância do dia a dia.",
         price: "R$ 279,90",
         cta: "Ver peça",
-        imageSrc: "/images/roupas/zara/Captura de tela 2026-09-17 144423.png",
+        imageSrc: "/images/roupas/zara/Captura de tela 2026-09-17 144423.webp",
         focalPoint: { x: 0.5, y: 0.4 },
     },
     {
@@ -121,7 +121,7 @@ export const carouselClothing: ClothingItem[] = [
         tagline: "Vista quem você é.",
         price: "R$ 339,90",
         cta: "Ver peça",
-        imageSrc: "/images/roupas/zara/Captura de tela 2026-09-17 144512.png",
+        imageSrc: "/images/roupas/zara/Captura de tela 2026-09-17 144512.webp",
         focalPoint: { x: 0.5, y: 0.4 },
     },
 ];

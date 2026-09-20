@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Archivo, Bodoni_Moda } from "next/font/google";
+import { SITE_URL } from "@/lib/site";
 import "./globals.css";
 
 const bodoni = Bodoni_Moda({
@@ -15,6 +16,7 @@ const archivo = Archivo({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: "Xavier Collection",
   description:
     "Xavier Collection — fragrâncias, moda e lifestyle. Presença que se sente antes de se ver.",
@@ -24,7 +26,9 @@ export const metadata: Metadata = {
       "Xavier Collection — fragrâncias, moda e lifestyle. Presença que se sente antes de se ver.",
     type: "website",
     locale: "pt_BR",
+    url: "/",
   },
+  alternates: { canonical: "/" },
 };
 
 export const viewport: Viewport = {

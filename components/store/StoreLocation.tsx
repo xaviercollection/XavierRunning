@@ -124,7 +124,7 @@ export function StoreLocation() {
                             >
                                 <div ref={imageWrapRef} className="absolute inset-0">
                                     <Image
-                                        src="/images/store/xavier-store-front.jpeg"
+                                        src="/images/store/xavier-store-front.webp"
                                         alt="Fachada da loja física Xavier Collection — Rua Sólon de Lucena, 26, Centro de Arara"
                                         fill
                                         sizes="(min-width: 768px) 58vw, 100vw"

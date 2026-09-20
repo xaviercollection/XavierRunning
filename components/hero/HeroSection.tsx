@@ -66,9 +66,6 @@ export function HeroSection({ onReady, onLoadProgress }: HeroSectionProps) {
   const taglineRef = useRef<HTMLParagraphElement | null>(null);
   const phraseRef = useRef<HTMLParagraphElement | null>(null);
   const ctaRef = useRef<HTMLAnchorElement | null>(null);
-  // Decorative campaign frame (corner labels, margin runs, scroll cue) —
-  // one node, one entrance, so it never fights the layers that matter.
-  const frameRef = useRef<HTMLDivElement | null>(null);
 
   const readyFiredRef = useRef(false);
   const [imagesLoaded, setImagesLoaded] = useState(0);
@@ -117,7 +114,6 @@ export function HeroSection({ onReady, onLoadProgress }: HeroSectionProps) {
 
     if (reducedMotion) {
       gsap.set(targets, { opacity: 1, y: 0, scale: 1, clearProps: "letterSpacing" });
-      gsap.set(frameRef.current, { opacity: 1 });
       return;
     }
 
@@ -132,8 +128,7 @@ export function HeroSection({ onReady, onLoadProgress }: HeroSectionProps) {
       )
       .fromTo(taglineRef.current, { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.7 }, "-=0.7")
       .fromTo(phraseRef.current, { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.7 }, "-=0.55")
-      .fromTo(ctaRef.current, { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.7 }, "-=0.4")
-      .fromTo(frameRef.current, { opacity: 0 }, { opacity: 1, duration: 1.1, ease: "none" }, "-=0.3");
+      .fromTo(ctaRef.current, { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.7 }, "-=0.4");
 
     return () => {
       tl.kill();
@@ -306,7 +301,7 @@ export function HeroSection({ onReady, onLoadProgress }: HeroSectionProps) {
                   style={{ aspectRatio: SYMBOL_CONTENT_ASPECT, willChange: "transform" }}
                 >
                   <Image
-                    src="/images/brand/xavier-symbol-3d.png"
+                    src="/images/brand/xavier-symbol-3d.webp"
                     alt="Xavier Collection"
                     fill
                     priority
@@ -332,7 +327,7 @@ export function HeroSection({ onReady, onLoadProgress }: HeroSectionProps) {
                   style={{ aspectRatio: WORDMARK_CONTENT_ASPECT, willChange: "transform" }}
                 >
                   <Image
-                    src="/images/brand/xavier-wordmark-3d.png"
+                    src="/images/brand/xavier-wordmark-3d.webp"
                     alt=""
                     aria-hidden="true"
                     fill
@@ -375,58 +370,6 @@ export function HeroSection({ onReady, onLoadProgress }: HeroSectionProps) {
           </a>
         </div>
 
-        {/* Campaign frame — decorative HUD, never interactive */}
-        <div
-          ref={frameRef}
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 z-20 opacity-0"
-        >
-          <div className="absolute left-[clamp(1.25rem,4vw,3.5rem)] top-[4.75rem] md:top-[5.5rem]">
-            <p className="text-[9px] tracking-[0.35em] text-ink-faint uppercase md:text-[11px]">
-              Xavier / 001
-            </p>
-            <span className="mt-3 block h-px w-12 bg-gold/60" />
-          </div>
-
-          <div className="absolute right-[clamp(1.25rem,4vw,3.5rem)] top-[4.75rem] text-right md:top-[5.5rem]">
-            <p className="text-[9px] tracking-[0.35em] text-ink-faint uppercase md:text-[11px]">
-              Collection / 2026
-            </p>
-            <span className="mt-3 ml-auto block h-px w-12 bg-white/15" />
-          </div>
-
-          <div className="absolute bottom-[7rem] left-[clamp(1.25rem,4vw,3.5rem)] md:bottom-10">
-            <p className="text-[9px] tracking-[0.3em] text-gold/70 uppercase md:text-[11px]">
-              Curated by Xavier
-            </p>
-          </div>
-
-          <div className="absolute bottom-[7rem] right-[clamp(1.25rem,4vw,3.5rem)] text-right md:bottom-10">
-            <p className="text-[9px] tracking-[0.3em] text-ink-faint uppercase md:text-[11px]">
-              Selected goods
-            </p>
-          </div>
-
-          <p className="v-text absolute left-[clamp(1rem,3vw,2.5rem)] top-1/2 hidden -translate-y-1/2 text-[9px] tracking-[0.35em] text-ink-faint/70 uppercase md:block">
-            New season
-          </p>
-          <p className="v-text absolute right-[clamp(1rem,3vw,2.5rem)] top-1/2 hidden -translate-y-1/2 text-[9px] tracking-[0.35em] text-ink-faint/70 uppercase md:block">
-            Moda · Perfumaria
-          </p>
-
-          <span className="absolute left-0 top-[22%] hidden h-px w-[12vw] rotate-[14deg] bg-gold/25 md:block" />
-          <span className="absolute bottom-[16%] right-[-4vw] hidden h-px w-[18vw] rotate-[14deg] bg-white/10 md:block" />
-
-          <div className="absolute bottom-6 left-1/2 flex -translate-x-1/2 flex-col items-center gap-3 md:bottom-8">
-            <span className="text-[9px] tracking-[0.35em] text-ink-faint uppercase">Scroll</span>
-            <span className="block h-10 w-px overflow-hidden bg-white/10">
-              <span
-                className="block h-3 w-px bg-gold"
-                style={{ animation: "xc-scroll 2.4s var(--ease-xavier) infinite" }}
-              />
-            </span>
-          </div>
-        </div>
       </div>
     </section>
   );

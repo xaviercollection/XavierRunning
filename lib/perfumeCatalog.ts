@@ -53,7 +53,7 @@ export const carouselPerfumes: CarouselPerfume[] = [
     cta: "Conhecer fragrância",
     media: {
       type: "image",
-      src: "/images/perfumes/212-vip-black.png",
+      src: "/images/perfumes/212-vip-black.webp",
       focalPoint: { x: 0.5, y: 0.52 },
     },
   },

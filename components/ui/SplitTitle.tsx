@@ -12,6 +12,7 @@ if (typeof window !== "undefined") {
 type SplitTitleVariant = "converge" | "rise" | "orbit";
 
 interface SplitTitleProps {
+  id?: string;
   text?: string;
   lines?: string[];
   as?: ElementType;
@@ -89,6 +90,7 @@ function SplitLine({ line }: { line: string }) {
  * lateral parallax), keeping stacked display words intact.
  */
 export function SplitTitle({
+  id,
   text,
   lines,
   as = "h2",
@@ -164,6 +166,7 @@ export function SplitTitle({
 
   return (
     <Tag
+      id={id}
       ref={containerRef}
       className={className}
       style={needsPerspective ? ({ perspective: "500px" } as CSSProperties) : undefined}

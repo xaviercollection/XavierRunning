@@ -3,7 +3,8 @@
 import { useEffect, useRef } from "react";
 
 /** Color presets for the silk field. `silk` keeps the original purple-gray
- *  look; `champagne` adapts it to the Xavier palette (warm gold on black). */
+ * look from the 21st component; `champagne` remains available for isolated
+ * accents, but is no longer the site's global background. */
 const TONES = {
   silk: {
     stops: ["#1a1a1a", "#2a2a2a", "#1a1a1a"],
@@ -30,7 +31,7 @@ interface SilkBackgroundProps {
  * render scale and a ~30fps throttle; the rAF loop pauses entirely while the
  * element is off-screen, and reduced motion renders one static frame.
  */
-export function SilkBackground({ tone = "champagne", className, scale = 0.5 }: SilkBackgroundProps) {
+export function SilkBackground({ tone = "silk", className, scale = 0.55 }: SilkBackgroundProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const animationRef = useRef<number | null>(null);
 
@@ -57,8 +58,10 @@ export function SilkBackground({ tone = "champagne", className, scale = 0.5 }: S
       const parent = canvas.parentElement;
       const width = parent ? parent.clientWidth : window.innerWidth;
       const height = parent ? parent.clientHeight : window.innerHeight;
-      canvas.width = Math.max(1, Math.floor(width * scale));
-      canvas.height = Math.max(1, Math.floor(height * scale));
+      const renderScale = Math.min(1, Math.max(0.35, scale));
+      canvas.width = Math.max(1, Math.floor(width * renderScale));
+      canvas.height = Math.max(1, Math.floor(height * renderScale));
+      ctx.imageSmoothingEnabled = true;
     };
 
     resizeCanvas();
@@ -88,8 +91,12 @@ export function SilkBackground({ tone = "champagne", className, scale = 0.5 }: S
       const imageData = ctx.createImageData(width, height);
       const data = imageData.data;
 
-      for (let x = 0; x < width; x += 2) {
-        for (let y = 0; y < height; y += 2) {
+      // Fill every pixel. The reference implementation advanced by two on
+      // both axes but wrote only one pixel, leaving three transparent pixels
+      // per sample. Against the black base those gaps appeared as a grid of
+      // dark squares, especially during zoom and scroll transforms.
+      for (let y = 0; y < height; y += 1) {
+        for (let x = 0; x < width; x += 1) {
           const u = (x / width) * textureScale;
           const v = (y / height) * textureScale;
 
@@ -190,6 +197,7 @@ export function SilkBackground({ tone = "champagne", className, scale = 0.5 }: S
       ref={canvasRef}
       aria-hidden="true"
       className={className}
+      style={{ imageRendering: "auto" }}
     />
   );
 }

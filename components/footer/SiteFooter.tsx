@@ -1,8 +1,7 @@
 const EXPLORE_LINKS = [
-  { label: "Novidades", href: "#colecao" },
-  { label: "Masculino", href: "#colecao" },
+  { label: "Novidades", href: "#colecao-roupas" },
+  { label: "Masculino", href: "#colecao-roupas" },
   { label: "Perfumes", href: "#fragrancias" },
-  { label: "Marcas", href: "#marcas" },
 ];
 
 const CONTACT_SLOTS = [
