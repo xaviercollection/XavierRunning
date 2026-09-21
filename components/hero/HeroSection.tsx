@@ -87,8 +87,8 @@ export function HeroSection({ onReady, onLoadProgress }: HeroSectionProps) {
   // update a component while rendering a different component".
   useEffect(() => {
     if (imagesLoaded === 0) return;
-    onLoadProgress(Math.min(1, imagesLoaded / 2));
-    if (imagesLoaded >= 2) fireReady();
+    onLoadProgress(Math.min(1, imagesLoaded / 3));
+    if (imagesLoaded >= 3) fireReady();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [imagesLoaded]);
 
@@ -259,6 +259,21 @@ export function HeroSection({ onReady, onLoadProgress }: HeroSectionProps) {
   return (
     <section ref={heroRef} id="top" className="relative h-[108svh] min-h-[620px] w-full md:h-[116svh]">
       <div className="sticky top-0 h-[100dvh] min-h-[620px] w-full overflow-hidden">
+        {/* LAYER 1 — a fotografia real da loja ancora a abertura na Xavier.
+            O recorte preserva a parede com a marca no desktop e mantém o
+            ambiente reconhecível no celular. */}
+        <Image
+          src="/images/store/xavier-hero-store.webp"
+          alt=""
+          aria-hidden="true"
+          fill
+          priority
+          sizes="100vw"
+          onLoad={handleImageLoad}
+          className="scale-[1.025] object-cover object-[66%_40%] md:object-[67%_41%]"
+          style={{ filter: "blur(2px) brightness(0.56) saturate(0.72) contrast(1.04)" }}
+        />
+
         {/* LAYER 2 — cinematic overlay: a soft diagonal for depth plus a
             vertical readability ramp, over the ambient background. The dark
             treatment keeps white text from fighting the page. */}
@@ -267,7 +282,7 @@ export function HeroSection({ onReady, onLoadProgress }: HeroSectionProps) {
           aria-hidden="true"
           className="pointer-events-none absolute inset-0"
           style={{
-            opacity: 0.82,
+            opacity: 0.78,
             background:
               "linear-gradient(180deg, rgba(3,3,3,0.26) 0%, rgba(3,3,3,0.10) 40%, rgba(3,3,3,0.46) 78%, rgba(3,3,3,0.72) 100%), linear-gradient(90deg, rgba(3,3,3,0.52) 0%, rgba(3,3,3,0.16) 40%, rgba(3,3,3,0.40) 100%), radial-gradient(ellipse at 50% 42%, transparent 42%, rgba(3,3,3,0.32) 100%)",
           }}

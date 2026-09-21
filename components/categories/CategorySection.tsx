@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 
 type Category = {
   number: string;
@@ -17,7 +18,7 @@ const CATEGORIES: Category[] = [
     number: "01",
     name: "Roupas",
     description: "Seleções que carregam atitude, da rua ao essencial.",
-    href: "#colecao-roupas",
+    href: "/loja#produtos",
     imageSrc: "/images/store/xavier-category-clothing.webp",
     imageAlt: "Araras com roupas disponíveis na Xavier Collection",
     objectPosition: "34% 45%",
@@ -27,7 +28,7 @@ const CATEGORIES: Category[] = [
     number: "02",
     name: "Perfumes",
     description: "Fragrâncias para deixar presença em cada chegada.",
-    href: "#fragrancias",
+    href: "/loja#produtos",
     imageSrc: "/images/store/xavier-category-perfumes.webp",
     imageAlt: "Prateleiras de perfumes disponíveis na Xavier Collection",
     objectPosition: "68% 43%",
@@ -37,7 +38,7 @@ const CATEGORIES: Category[] = [
     number: "03",
     name: "Óculos",
     description: "Armações selecionadas para definir o olhar.",
-    href: "#vitrine",
+    href: "/loja#produtos",
     imageSrc: "/images/store/xavier-category-accessories.webp",
     imageAlt: "Óculos disponíveis na Xavier Collection",
     objectPosition: "30% 38%",
@@ -48,7 +49,7 @@ const CATEGORIES: Category[] = [
     number: "04",
     name: "Relógios",
     description: "Detalhes que acompanham o seu ritmo.",
-    href: "#vitrine",
+    href: "/loja#produtos",
     imageSrc: "/images/store/xavier-category-perfumes.webp",
     imageAlt: "Relógios disponíveis na Xavier Collection",
     objectPosition: "76% 78%",
@@ -99,7 +100,7 @@ export function CategorySection() {
 
 function CategoryCard({ category }: { category: Category }) {
   return (
-    <a
+    <Link
       href={category.href}
       className="group relative flex min-h-[10.5rem] overflow-hidden border border-white/10 bg-[#080808]/90 p-3 backdrop-blur-sm focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-4 focus-visible:outline-gold sm:min-h-[12rem] sm:p-4"
     >
@@ -144,7 +145,7 @@ function CategoryCard({ category }: { category: Category }) {
           {category.description}
         </p>
       </div>
-    </a>
+    </Link>
   );
 }
 

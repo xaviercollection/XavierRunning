@@ -225,14 +225,14 @@ export function PerfumeCoverflowCarousel({ perfumes, id }: PerfumeCoverflowCarou
       </div>
 
       <div className="relative z-10 mx-auto max-w-3xl px-6 text-center">
-        <p className="eyebrow">Perfumaria · Xavier Select</p>
+        <p className="eyebrow">Destaques · Perfumaria</p>
         <SplitTitle
           variant="converge"
-          text="Fragrâncias que deixam presença."
+          text="Presença que não passa despercebida."
           className="mt-6 font-display text-[clamp(2.5rem,7.5vw,6.5rem)] leading-[0.92] text-ink text-balance"
         />
         <p className="mt-5 text-sm text-ink-muted md:text-base">
-          Uma presença que chega antes das palavras.
+          Arraste para descobrir cada fragrância.
         </p>
       </div>
 
@@ -462,17 +462,32 @@ function CarouselCard({ perfume, isActive, sign, playbackAllowed, reducedMotion,
             />
           ) : (
             preload && (
-              <Image
-                src={perfume.media.poster}
-                alt={`${perfume.name} — ${perfume.brand}`}
-                fill
-                sizes="(min-width: 768px) 34vw, 84vw"
-                className="object-cover"
-                priority={isActive}
-                style={{
-                  objectPosition: `${(perfume.media.focalPoint?.x ?? 0.5) * 100}% ${(perfume.media.focalPoint?.y ?? 0.5) * 100}%`,
-                }}
-              />
+              perfume.media.poster ? (
+                <Image
+                  src={perfume.media.poster}
+                  alt={`${perfume.name} — ${perfume.brand}`}
+                  fill
+                  sizes="(min-width: 768px) 34vw, 84vw"
+                  className="object-cover"
+                  priority={isActive}
+                  style={{
+                    objectPosition: `${(perfume.media.focalPoint?.x ?? 0.5) * 100}% ${(perfume.media.focalPoint?.y ?? 0.5) * 100}%`,
+                  }}
+                />
+              ) : (
+                <video
+                  src={perfume.media.src}
+                  className="absolute inset-0 h-full w-full object-cover"
+                  style={{
+                    objectPosition: `${(perfume.media.focalPoint?.x ?? 0.5) * 100}% ${(perfume.media.focalPoint?.y ?? 0.5) * 100}%`,
+                  }}
+                  muted
+                  playsInline
+                  preload="metadata"
+                  tabIndex={-1}
+                  aria-hidden="true"
+                />
+              )
             )
           )}
         </div>
@@ -532,7 +547,7 @@ function CarouselCard({ perfume, isActive, sign, playbackAllowed, reducedMotion,
         )}
         {perfume.cta && (
           <a
-            href="#vitrine"
+            href="/loja#produtos"
             className="pointer-events-auto mt-0.5 flex items-center gap-2 text-[10px] tracking-[0.22em] text-ink uppercase transition-colors duration-300 hover:text-gold"
             style={revealStyle(isActive, 4, reducedMotion)}
           >

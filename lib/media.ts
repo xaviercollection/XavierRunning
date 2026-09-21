@@ -24,7 +24,7 @@ export type PerfumeMedia =
       type: "video";
       src: string;
       /** Static frame shown for lateral/inactive cards and as the ambience source — the video itself never plays there. */
-      poster: string;
+      poster?: string;
       focalPoint?: FocalPoint;
       mobileFocalPoint?: FocalPoint;
     };
@@ -36,7 +36,7 @@ function padFrame(index: number): string {
 /** The single static image used for a poster (inactive card / ambience background). */
 export function getPosterSrc(media: PerfumeMedia): string {
   if (media.type === "image") return media.src;
-  if (media.type === "video") return media.poster;
+  if (media.type === "video") return media.poster ?? "/images/store/xavier-category-perfumes.webp";
   const frame = media.posterFrame ?? 0;
   return `${media.basePath}/frame_${padFrame(frame + 1)}.webp`;
 }
