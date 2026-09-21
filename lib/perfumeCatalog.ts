@@ -51,6 +51,7 @@ export const carouselPerfumes: CarouselPerfume[] = [
     media: {
       type: "video",
       src: "/videos/perfumes/arabian-purple.mp4",
+      poster: "/videos/perfumes/arabian-purple-poster.jpg",
       focalPoint: { x: 0.5, y: 0.5 },
     },
   },
@@ -78,6 +79,7 @@ export const carouselPerfumes: CarouselPerfume[] = [
     media: {
       type: "video",
       src: "/videos/perfumes/arabian-gold.mp4",
+      poster: "/videos/perfumes/arabian-gold-poster.jpg",
       focalPoint: { x: 0.5, y: 0.5 },
     },
   },

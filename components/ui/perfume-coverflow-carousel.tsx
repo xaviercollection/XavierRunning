@@ -70,7 +70,9 @@ const DRAG_FOLLOW_RATIO = 0.3;
 const DRAG_FOLLOW_MAX = 70;
 const AUTOPLAY_INTERVAL = 8000;
 const AUTOPLAY_RESUME_DELAY = 5000;
-const PRELOAD_WINDOW = 1;
+// Os cinco cards visíveis recebem apenas posters leves. O MP4 continua montado
+// somente no card ativo, evitando downloads simultâneos e cards transparentes.
+const PRELOAD_WINDOW = 2;
 
 export function PerfumeCoverflowCarousel({ perfumes, id }: PerfumeCoverflowCarouselProps) {
   const reducedMotion = useReducedMotion();
@@ -446,11 +448,30 @@ function CarouselCard({ perfume, isActive, sign, playbackAllowed, reducedMotion,
         />
       ) : perfume.media.type === "video" ? (
         <div className="absolute inset-0" style={parallaxStyle}>
-          {playbackAllowed ? (
+          {preload && (
+            <Image
+              src={getPosterSrc(perfume.media)}
+              alt={`${perfume.name} — ${perfume.brand}`}
+              fill
+              sizes="(min-width: 768px) 34vw, 84vw"
+              className="object-cover"
+              priority={isActive}
+              style={{
+                objectPosition: `${(perfume.media.focalPoint?.x ?? 0.5) * 100}% ${(perfume.media.focalPoint?.y ?? 0.5) * 100}%`,
+              }}
+            />
+          )}
+          {playbackAllowed && (
+            <div
+              className="pointer-events-none absolute inset-0 animate-pulse bg-[linear-gradient(110deg,transparent_25%,rgba(255,255,255,0.06)_45%,transparent_65%)] bg-[length:220%_100%]"
+              aria-hidden="true"
+            />
+          )}
+          {playbackAllowed && (
             <video
               ref={videoRef}
               src={perfume.media.src}
-              className="absolute inset-0 h-full w-full object-cover"
+              className="absolute inset-0 z-10 h-full w-full object-cover opacity-0 transition-opacity duration-500"
               style={{
                 objectPosition: `${(perfume.media.focalPoint?.x ?? 0.5) * 100}% ${(perfume.media.focalPoint?.y ?? 0.5) * 100}%`,
               }}
@@ -458,37 +479,14 @@ function CarouselCard({ perfume, isActive, sign, playbackAllowed, reducedMotion,
               playsInline
               loop
               preload="auto"
-              poster={perfume.media.poster}
+              poster={getPosterSrc(perfume.media)}
+              onLoadedData={(event) => {
+                event.currentTarget.style.opacity = "1";
+              }}
+              onCanPlay={(event) => {
+                event.currentTarget.style.opacity = "1";
+              }}
             />
-          ) : (
-            preload && (
-              perfume.media.poster ? (
-                <Image
-                  src={perfume.media.poster}
-                  alt={`${perfume.name} — ${perfume.brand}`}
-                  fill
-                  sizes="(min-width: 768px) 34vw, 84vw"
-                  className="object-cover"
-                  priority={isActive}
-                  style={{
-                    objectPosition: `${(perfume.media.focalPoint?.x ?? 0.5) * 100}% ${(perfume.media.focalPoint?.y ?? 0.5) * 100}%`,
-                  }}
-                />
-              ) : (
-                <video
-                  src={perfume.media.src}
-                  className="absolute inset-0 h-full w-full object-cover"
-                  style={{
-                    objectPosition: `${(perfume.media.focalPoint?.x ?? 0.5) * 100}% ${(perfume.media.focalPoint?.y ?? 0.5) * 100}%`,
-                  }}
-                  muted
-                  playsInline
-                  preload="metadata"
-                  tabIndex={-1}
-                  aria-hidden="true"
-                />
-              )
-            )
           )}
         </div>
       ) : (
