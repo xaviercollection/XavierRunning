@@ -36,7 +36,6 @@ export function ExperienceShell({ storeShowcase, footer }: ExperienceShellProps)
 
   return (
     <>
-      <GlobalBackground />
       <div aria-hidden="true" className="grain-fixed" />
 
       {loaderMounted && (
