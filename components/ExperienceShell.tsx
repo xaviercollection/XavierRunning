@@ -5,7 +5,6 @@ import { useCallback, useState, type ReactNode } from "react";
 import { LoaderScreen } from "@/components/loader/LoaderScreen";
 import { SiteHeader } from "@/components/header/SiteHeader";
 import { HeroSection } from "@/components/hero/HeroSection";
-import { GlobalBackground } from "@/components/background/GlobalBackground";
 import { PerfumeCoverflowCarousel } from "@/components/ui/perfume-coverflow-carousel";
 import { SeamBloom } from "@/components/ui/SeamBloom";
 import { ClothingCarousel } from "@/components/fashion/ClothingCarousel";
