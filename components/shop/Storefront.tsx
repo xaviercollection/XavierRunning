@@ -3,21 +3,30 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  formatStorePrice,
-  STORE_BRANDS,
-  STORE_CATEGORIES,
-  STORE_PRODUCTS,
-  STORE_SIZES,
-  type StoreProduct,
-} from "@/lib/storeCatalog";
+import { formatStorePrice, type StoreProduct } from "@/lib/storeCatalog";
+import { buildWhatsAppUrl, resolveWhatsappNumber } from "@/lib/store/whatsapp";
 
 type SortMode = "featured" | "price-asc" | "price-desc" | "popular";
 type CartLine = { productId: string; size: string; quantity: number };
 
 const COLOR_FILTERS = ["Preto", "Areia", "Azul", "Verde", "Branco", "Marrom", "Dourado"];
 
-export function Storefront() {
+// Faixa do filtro de preço. O teto acompanha o produto mais caro do catálogo (mínimo 700, como
+// sempre foi), para que um produto novo acima de R$ 700 nunca fique inalcançável pelo filtro.
+const PRICE_FLOOR = 150;
+const PRICE_CEILING_MIN = 700;
+
+export interface StorefrontProps {
+  /** Catálogo publicado (vem do Supabase; a RLS já removeu rascunhos e categorias ocultas). */
+  products: StoreProduct[];
+  /** Nomes das categorias visíveis, na ordem definida no painel. */
+  categories: string[];
+  hero: { eyebrow: string; title: string; description: string; imageSrc: string };
+  /** WhatsApp configurado no painel. Vazio/inválido => número padrão da loja. */
+  whatsapp: string;
+}
+
+export function Storefront({ products: catalog, categories, hero, whatsapp }: StorefrontProps) {
   const [query, setQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState("Todos");
   const [sortMode, setSortMode] = useState<SortMode>("featured");
@@ -28,9 +37,31 @@ export function Storefront() {
   const [selectedBrands, setSelectedBrands] = useState<string[]>([]);
   const [selectedSizes, setSelectedSizes] = useState<string[]>([]);
   const [selectedColor, setSelectedColor] = useState("");
-  const [maxPrice, setMaxPrice] = useState(700);
+  const [priceLimit, setPriceLimit] = useState<number | null>(null);
   const [favorites, setFavorites] = useState<string[]>([]);
   const [cart, setCart] = useState<CartLine[]>([]);
+
+  const brands = useMemo(
+    () => Array.from(new Set(catalog.map((product) => product.brand))).sort(),
+    [catalog],
+  );
+  const sizes = useMemo(
+    () => Array.from(new Set(catalog.flatMap((product) => product.sizes))),
+    [catalog],
+  );
+  const priceCeiling = useMemo(
+    () =>
+      Math.max(
+        PRICE_CEILING_MIN,
+        Math.ceil(Math.max(0, ...catalog.map((product) => product.price)) / 50) * 50,
+      ),
+    [catalog],
+  );
+  const maxPrice = Math.min(priceLimit ?? priceCeiling, priceCeiling);
+
+  const titleBreak = hero.title.lastIndexOf(" ");
+  const heroTitleFirstLine = titleBreak > 0 ? hero.title.slice(0, titleBreak) : hero.title;
+  const heroTitleLastLine = titleBreak > 0 ? hero.title.slice(titleBreak + 1) : "";
 
   const overlayOpen = cartOpen || quickView !== null;
 
@@ -56,7 +87,7 @@ export function Storefront() {
 
   const products = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase("pt-BR");
-    const filtered = STORE_PRODUCTS.filter((product) => {
+    const filtered = catalog.filter((product) => {
       const matchesQuery =
         !normalizedQuery ||
         `${product.brand} ${product.name} ${product.category}`
@@ -88,19 +119,17 @@ export function Storefront() {
       if (sortMode === "popular") return (a.featured ?? 99) - (b.featured ?? 99);
       return (a.badge === "Novo" ? -1 : 0) - (b.badge === "Novo" ? -1 : 0);
     });
-  }, [activeCategory, maxPrice, query, selectedBrands, selectedColor, selectedSizes, sortMode]);
+  }, [activeCategory, catalog, maxPrice, query, selectedBrands, selectedColor, selectedSizes, sortMode]);
 
   const categorizedProducts = useMemo(
     () =>
-      STORE_CATEGORIES.filter(
-        (category): category is StoreProduct["category"] => category !== "Todos",
-      )
+      categories
         .map((category) => ({
           category,
           products: products.filter((product) => product.category === category),
         }))
         .filter((group) => group.products.length > 0),
-    [products],
+    [categories, products],
   );
 
   const promotionProducts = useMemo(
@@ -115,10 +144,10 @@ export function Storefront() {
   const cartDetails = useMemo(
     () =>
       cart.flatMap((line) => {
-        const product = STORE_PRODUCTS.find((item) => item.id === line.productId);
+        const product = catalog.find((item) => item.id === line.productId);
         return product ? [{ ...line, product }] : [];
       }),
-    [cart],
+    [cart, catalog],
   );
 
   const cartCount = cart.reduce((total, item) => total + item.quantity, 0);
@@ -130,7 +159,7 @@ export function Storefront() {
     selectedBrands.length +
     selectedSizes.length +
     (selectedColor ? 1 : 0) +
-    (maxPrice < 700 ? 1 : 0);
+    (maxPrice < priceCeiling ? 1 : 0);
 
   function toggleListValue(
     value: string,
@@ -144,7 +173,7 @@ export function Storefront() {
     setSelectedBrands([]);
     setSelectedSizes([]);
     setSelectedColor("");
-    setMaxPrice(700);
+    setPriceLimit(null);
   }
 
   function openProduct(product: StoreProduct) {
@@ -177,6 +206,25 @@ export function Storefront() {
         return quantity > 0 ? [{ ...line, quantity }] : [];
       }),
     );
+  }
+
+  // Finaliza pelo WhatsApp. Nada é gravado no banco e o estoque NÃO é alterado: o pedido é só
+  // uma mensagem; o lojista confirma disponibilidade e baixa o estoque manualmente no painel.
+  function checkoutOnWhatsApp() {
+    if (cartDetails.length === 0) return;
+    const url = buildWhatsAppUrl(
+      resolveWhatsappNumber(whatsapp),
+      cartDetails.map((line) => ({
+        name: line.product.name,
+        brand: line.product.brand,
+        category: line.product.category,
+        size: line.size,
+        quantity: line.quantity,
+        unitPrice: line.product.price,
+      })),
+    );
+    const opened = window.open(url, "_blank", "noopener,noreferrer");
+    if (!opened) window.location.assign(url);
   }
 
   return (
@@ -237,7 +285,7 @@ export function Storefront() {
 
       <section className="relative flex min-h-[72svh] items-end overflow-hidden pb-[clamp(4rem,9vw,8rem)] pt-32">
         <Image
-          src="/images/store/xavier-category-clothing.webp"
+          src={hero.imageSrc}
           alt="Interior da Xavier Collection com roupas selecionadas"
           fill
           loading="eager"
@@ -249,16 +297,18 @@ export function Storefront() {
         <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(3,3,3,.18)_0%,transparent_38%,rgba(3,3,3,.64)_100%)]" />
 
         <div className="xc-container relative z-10">
-          <p className="eyebrow store-reveal">Xavier Store · Curadoria masculina</p>
+          {hero.eyebrow && <p className="eyebrow store-reveal">{hero.eyebrow}</p>}
           <h1 className="store-reveal mt-5 max-w-4xl font-display text-[clamp(4rem,10vw,9rem)] leading-[0.82] tracking-[-0.055em] text-ink [animation-delay:100ms]">
-            Vista sua
-            <br />
-            presença.
+            {heroTitleFirstLine}
+            {heroTitleLastLine && (
+              <>
+                <br />
+                {heroTitleLastLine}
+              </>
+            )}
           </h1>
           <div className="store-reveal mt-8 flex max-w-2xl flex-col gap-5 sm:flex-row sm:items-end sm:justify-between [animation-delay:200ms]">
-            <p className="max-w-md text-sm leading-relaxed text-white/60">
-              Peças escolhidas para quem entende que estilo não precisa falar alto para ser percebido.
-            </p>
+            <p className="max-w-md text-sm leading-relaxed text-white/60">{hero.description}</p>
             <a href="#produtos" className="link-xc shrink-0">
               Ver coleção <span className="arrow">↓</span>
             </a>
@@ -276,7 +326,7 @@ export function Storefront() {
             aria-label="Categorias de produtos"
             className="mx-auto flex max-w-[1680px] gap-7 overflow-x-auto px-[clamp(1.25rem,4vw,3.5rem)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           >
-            {STORE_CATEGORIES.map((category) => {
+            {["Todos", ...categories].map((category) => {
               const active = activeCategory === category;
               return (
                 <button
@@ -306,7 +356,7 @@ export function Storefront() {
         >
           <div className="mx-auto grid max-w-[1680px] gap-9 px-[clamp(1.25rem,4vw,3.5rem)] py-9 sm:grid-cols-2 lg:grid-cols-4">
             <FilterGroup title="Marca">
-              {STORE_BRANDS.map((brand) => (
+              {brands.map((brand) => (
                 <FilterCheck
                   key={brand}
                   label={brand}
@@ -318,7 +368,7 @@ export function Storefront() {
 
             <FilterGroup title="Tamanho">
               <div className="flex flex-wrap gap-2">
-                {STORE_SIZES.map((size) => (
+                {sizes.map((size) => (
                   <button
                     key={size}
                     type="button"
@@ -357,16 +407,16 @@ export function Storefront() {
             <FilterGroup title={`Até ${formatStorePrice(maxPrice)}`}>
               <input
                 type="range"
-                min="150"
-                max="700"
+                min={PRICE_FLOOR}
+                max={priceCeiling}
                 step="50"
                 value={maxPrice}
-                onChange={(event) => setMaxPrice(Number(event.target.value))}
+                onChange={(event) => setPriceLimit(Number(event.target.value))}
                 className="w-full accent-[#c8a45d]"
               />
               <div className="mt-3 flex justify-between text-[9px] text-ink-faint">
-                <span>R$ 150</span>
-                <span>R$ 700</span>
+                <span>{`R$ ${PRICE_FLOOR}`}</span>
+                <span>{`R$ ${priceCeiling}`}</span>
               </div>
               <button type="button" onClick={resetFilters} className="link-xc mt-7">
                 Limpar filtros
@@ -603,7 +653,7 @@ export function Storefront() {
                 <span className="font-display text-3xl text-champagne">{formatStorePrice(cartTotal)}</span>
               </div>
               <p className="mt-3 text-[10px] leading-relaxed text-ink-faint">Frete e condições serão definidos na etapa de atendimento.</p>
-              <button type="button" className="btn-xc btn-xc-gold mt-6 w-full justify-center">Continuar atendimento</button>
+              <button type="button" onClick={checkoutOnWhatsApp} className="btn-xc btn-xc-gold mt-6 w-full justify-center">Continuar atendimento</button>
             </div>
           )}
         </aside>

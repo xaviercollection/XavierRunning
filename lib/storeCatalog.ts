@@ -1,3 +1,6 @@
+// Catálogo INICIAL (seed). Em produção a loja e o painel leem o Supabase; este arquivo é a
+// fonte de scripts/generate-seed-migration.mjs, que gera a migration 20260921120500_seed_catalog.sql.
+// Não importe STORE_PRODUCTS/STORE_CATEGORIES para renderizar a loja.
 export const STORE_CATEGORIES = [
   "Todos",
   "Perfumes",
@@ -11,7 +14,8 @@ export const STORE_CATEGORIES = [
   "Roupas de academia",
 ] as const;
 
-export type StoreCategory = Exclude<(typeof STORE_CATEGORIES)[number], "Todos">;
+// As categorias vivem no banco (tabela categories) e o lojista pode reordená-las/ocultá-las.
+export type StoreCategory = string;
 export type StoreBadge = "Novo" | "Esgotado" | "Últimas peças";
 
 export interface StoreProduct {
@@ -363,14 +367,6 @@ export const STORE_PRODUCTS: StoreProduct[] = [
     description: "Respirabilidade, secagem rápida e corte atlético.",
   },
 ];
-
-export const STORE_BRANDS = Array.from(
-  new Set(STORE_PRODUCTS.map((product) => product.brand)),
-).sort();
-
-export const STORE_SIZES = Array.from(
-  new Set(STORE_PRODUCTS.flatMap((product) => product.sizes)),
-);
 
 export function formatStorePrice(price: number) {
   return new Intl.NumberFormat("pt-BR", {

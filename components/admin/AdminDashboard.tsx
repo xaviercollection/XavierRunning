@@ -2,30 +2,33 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import { signOutAction } from "@/app/admin/login/actions";
 import { FinanceDashboard } from "@/components/admin/FinanceDashboard";
+import { formatStorePrice, type StoreBadge } from "@/lib/storeCatalog";
 import {
-  formatStorePrice,
-  STORE_CATEGORIES,
-  STORE_PRODUCTS,
-  type StoreBadge,
-  type StoreCategory,
-  type StoreProduct,
-} from "@/lib/storeCatalog";
+  deleteProductAction,
+  reorderCategoriesAction,
+  reorderFeaturedAction,
+  saveProductAction,
+  saveStoreSettingsAction,
+  setCategoryVisibilityAction,
+  setProductFeaturedAction,
+  setProductStatusAction,
+} from "@/lib/store/admin-actions";
+import type {
+  ActionResult,
+  AdminCategory,
+  AdminProduct,
+  FeaturedState,
+  ProductStatus,
+  StoreSettings,
+} from "@/lib/store/types";
+import { safeImageSrc } from "@/lib/store/mappers";
+import { createClient } from "@/lib/supabase/client";
+import { getProductImagesPublicPrefixSafe } from "@/lib/supabase/env";
 
 type AdminSection = "overview" | "finance" | "products" | "featured" | "categories" | "store";
-type ProductStatus = "active" | "draft" | "out-of-stock";
-
-type AdminProduct = StoreProduct & {
-  stock: number;
-  status: ProductStatus;
-  isFeatured: boolean;
-};
-
-type EditableCategory = {
-  name: StoreCategory;
-  visible: boolean;
-};
 
 const SECTION_LABELS: Record<AdminSection, { label: string; eyebrow: string }> = {
   overview: { label: "Visão geral", eyebrow: "Painel administrativo" },
@@ -36,37 +39,59 @@ const SECTION_LABELS: Record<AdminSection, { label: string; eyebrow: string }> =
   store: { label: "Vitrine e conteúdo", eyebrow: "Identidade da loja" },
 };
 
-const INITIAL_PRODUCTS: AdminProduct[] = STORE_PRODUCTS.map((product, index) => ({
-  ...product,
-  stock: product.badge === "Esgotado" ? 0 : ((index * 7 + 5) % 24) + 1,
-  status: product.badge === "Esgotado" ? "out-of-stock" : "active",
-  isFeatured: (product.featured ?? 99) <= 6,
-}));
+/** Uma Server Action pode lançar (rede caiu, deploy em andamento). Nunca deixe a UI presa por isso. */
+async function runAction<T>(action: () => Promise<ActionResult<T>>): Promise<ActionResult<T>> {
+  try {
+    return await action();
+  } catch {
+    return { ok: false, error: "Sem conexão com o servidor. Verifique a internet e tente novamente." };
+  }
+}
 
-const INITIAL_CATEGORIES: EditableCategory[] = STORE_CATEGORIES.filter(
-  (category): category is StoreCategory => category !== "Todos",
-).map((name) => ({ name, visible: true }));
-
-const EMPTY_PRODUCT: AdminProduct = {
-  id: "",
-  brand: "Xavier",
-  name: "",
-  category: "Camisas",
-  price: 0,
-  image: "/images/store/xavier-category-clothing.webp",
-  colors: [{ name: "Preto", hex: "#111111" }],
-  sizes: ["P", "M", "G"],
-  description: "",
-  stock: 0,
-  status: "draft",
-  isFeatured: false,
+const DEFAULT_IMAGE = "/images/store/xavier-category-clothing.webp";
+const UPLOAD_MAX_BYTES = 5 * 1024 * 1024;
+const UPLOAD_EXTENSIONS: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+  "image/avif": "avif",
 };
 
-export function AdminDashboard() {
+function makeEmptyProduct(categories: AdminCategory[]): AdminProduct {
+  return {
+    id: "",
+    brand: "Xavier",
+    name: "",
+    // Como no protótipo: "Camisas" por padrão (se o lojista ainda a tiver), senão a primeira categoria.
+    category: (categories.find((item) => item.name === "Camisas") ?? categories[0])?.name ?? "",
+    price: 0,
+    image: DEFAULT_IMAGE,
+    colors: [{ name: "Preto", hex: "#111111" }],
+    sizes: ["P", "M", "G"],
+    description: "",
+    stock: 0,
+    status: "draft",
+    isFeatured: false,
+  };
+}
+
+interface AdminDashboardProps {
+  initialProducts: AdminProduct[];
+  initialCategories: AdminCategory[];
+  initialSettings: StoreSettings;
+  adminEmail: string;
+}
+
+export function AdminDashboard({
+  initialProducts,
+  initialCategories,
+  initialSettings,
+  adminEmail,
+}: AdminDashboardProps) {
   const [section, setSection] = useState<AdminSection>("overview");
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [products, setProducts] = useState<AdminProduct[]>(INITIAL_PRODUCTS);
-  const [categories, setCategories] = useState<EditableCategory[]>(INITIAL_CATEGORIES);
+  const [products, setProducts] = useState<AdminProduct[]>(initialProducts);
+  const [categories, setCategories] = useState<AdminCategory[]>(initialCategories);
   const [productQuery, setProductQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("Todos");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -74,21 +99,8 @@ export function AdminDashboard() {
   const [isNewProduct, setIsNewProduct] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<AdminProduct | null>(null);
   const [toast, setToast] = useState("");
-  const [storeSettings, setStoreSettings] = useState({
-    eyebrow: "Xavier Store · Curadoria masculina",
-    title: "Vista sua presença.",
-    description:
-      "Peças escolhidas para quem entende que estilo não precisa falar alto para ser percebido.",
-    heroImage: "/images/store/xavier-category-clothing.webp",
-    announcementEnabled: true,
-    announcement: "Novidades selecionadas toda semana",
-    whatsapp: "",
-    instagram: "@xaviercollection",
-    address: "Rua Sólon de Lucena, 26 — Centro de Arara",
-    openingHours: "Segunda a sábado, das 08h às 18h",
-    seoTitle: "Loja | Xavier Collection",
-    seoDescription: "Moda masculina, perfumes e acessórios selecionados.",
-  });
+  const [saving, setSaving] = useState(false);
+  const [storeSettings, setStoreSettings] = useState<StoreSettings>(initialSettings);
 
   const visibleProducts = useMemo(() => {
     const query = productQuery.trim().toLocaleLowerCase("pt-BR");
@@ -124,7 +136,7 @@ export function AdminDashboard() {
 
   function openNewProduct() {
     setIsNewProduct(true);
-    setDraft({ ...EMPTY_PRODUCT, id: `produto-${Date.now()}` });
+    setDraft(makeEmptyProduct(categories));
   }
 
   function openEditProduct(product: AdminProduct) {
@@ -132,74 +144,163 @@ export function AdminDashboard() {
     setDraft({ ...product, colors: [...product.colors], sizes: [...product.sizes] });
   }
 
-  function saveProduct() {
-    if (!draft || !draft.name.trim() || !draft.brand.trim()) return;
-    if (isNewProduct) {
-      setProducts((current) => [draft, ...current]);
-      showToast("Produto criado no protótipo.");
-    } else {
-      setProducts((current) => current.map((product) => (product.id === draft.id ? draft : product)));
-      showToast("Alterações do produto salvas.");
+  async function saveProduct() {
+    if (!draft || saving || !draft.name.trim() || !draft.brand.trim()) return;
+    const category = categories.find((item) => item.name === draft.category);
+    if (!category) {
+      showToast("Selecione uma categoria.");
+      return;
     }
+
+    setSaving(true);
+    const result = await runAction(() => saveProductAction({
+      id: isNewProduct ? undefined : draft.id,
+      brand: draft.brand,
+      name: draft.name,
+      description: draft.description,
+      categoryId: category.id,
+      price: draft.price,
+      originalPrice: draft.originalPrice ?? null,
+      image: draft.image,
+      imagePosition: draft.imagePosition ?? null,
+      imageFit: draft.imageFit ?? "cover",
+      colors: draft.colors,
+      sizes: draft.sizes,
+      badge: draft.badge ?? null,
+      status: draft.status,
+      stock: draft.stock,
+      isFeatured: draft.isFeatured,
+    }));
+    setSaving(false);
+
+    if (!result.ok) {
+      showToast(result.error);
+      return;
+    }
+    const saved = result.data;
+    setProducts((current) =>
+      isNewProduct
+        ? [saved, ...current]
+        : current.map((product) => (product.id === saved.id ? saved : product)),
+    );
+    showToast(isNewProduct ? "Produto criado." : "Alterações do produto salvas.");
     setDraft(null);
   }
 
-  function confirmDelete() {
+  async function confirmDelete() {
     if (!pendingDelete) return;
-    setProducts((current) => current.filter((product) => product.id !== pendingDelete.id));
+    const target = pendingDelete;
+    const result = await runAction(() => deleteProductAction(target.id));
+    if (!result.ok) {
+      showToast(result.error);
+      return;
+    }
+    setProducts((current) => current.filter((product) => product.id !== target.id));
     setPendingDelete(null);
-    showToast("Produto removido do protótipo.");
+    showToast("Produto removido.");
   }
 
-  function toggleProductStatus(productId: string) {
+  async function toggleProductStatus(productId: string) {
+    const product = products.find((item) => item.id === productId);
+    if (!product) return;
+    const previous = product.status;
+    const next: ProductStatus = previous === "active" ? "draft" : "active";
+
+    const applyStatus = (status: ProductStatus) =>
+      setProducts((current) =>
+        current.map((item) => (item.id === productId ? { ...item, status } : item)),
+      );
+
+    applyStatus(next);
+    const result = await runAction(() => setProductStatusAction(productId, next));
+    if (!result.ok) {
+      applyStatus(previous);
+      showToast(result.error);
+    }
+  }
+
+  function applyFeaturedState(states: FeaturedState[]) {
+    const byId = new Map(states.map((state) => [state.id, state]));
     setProducts((current) =>
-      current.map((product) =>
-        product.id === productId
-          ? {
-              ...product,
-              status: product.status === "active" ? "draft" : "active",
-            }
-          : product,
-      ),
+      current.map((product) => {
+        const state = byId.get(product.id);
+        return state
+          ? { ...product, isFeatured: state.isFeatured, featured: state.featured ?? undefined }
+          : product;
+      }),
     );
   }
 
-  function toggleFeatured(productId: string) {
-    setProducts((current) =>
-      current.map((product) =>
-        product.id === productId
-          ? {
-              ...product,
-              isFeatured: !product.isFeatured,
-              featured: !product.isFeatured
-                ? current.filter((item) => item.isFeatured).length + 1
-                : undefined,
-            }
-          : product,
-      ),
-    );
+  async function toggleFeatured(productId: string) {
+    const product = products.find((item) => item.id === productId);
+    if (!product) return;
+    const result = await runAction(() => setProductFeaturedAction(productId, !product.isFeatured));
+    if (!result.ok) {
+      showToast(result.error);
+      return;
+    }
+    applyFeaturedState(result.data);
   }
 
-  function moveFeatured(productId: string, direction: -1 | 1) {
+  async function moveFeatured(productId: string, direction: -1 | 1) {
     const ordered = [...featuredProducts];
     const index = ordered.findIndex((product) => product.id === productId);
     const target = index + direction;
     if (index < 0 || target < 0 || target >= ordered.length) return;
     [ordered[index], ordered[target]] = [ordered[target], ordered[index]];
-    const order = new Map(ordered.map((product, itemIndex) => [product.id, itemIndex + 1]));
-    setProducts((current) =>
-      current.map((product) =>
-        order.has(product.id) ? { ...product, featured: order.get(product.id) } : product,
-      ),
-    );
+
+    const result = await runAction(() => reorderFeaturedAction(ordered.map((product) => product.id)));
+    if (!result.ok) {
+      showToast(result.error);
+      return;
+    }
+    applyFeaturedState(result.data);
   }
 
-  function moveCategory(index: number, direction: -1 | 1) {
+  async function moveCategory(index: number, direction: -1 | 1) {
     const target = index + direction;
     if (target < 0 || target >= categories.length) return;
+    const previous = categories;
     const next = [...categories];
     [next[index], next[target]] = [next[target], next[index]];
+
     setCategories(next);
+    const result = await runAction(() => reorderCategoriesAction(next.map((category) => category.id)));
+    if (!result.ok) {
+      setCategories(previous);
+      showToast(result.error);
+    }
+  }
+
+  async function toggleCategoryVisibility(categoryId: string) {
+    const category = categories.find((item) => item.id === categoryId);
+    if (!category) return;
+    const visible = !category.visible;
+
+    const applyVisibility = (value: boolean) =>
+      setCategories((current) =>
+        current.map((item) => (item.id === categoryId ? { ...item, visible: value } : item)),
+      );
+
+    applyVisibility(visible);
+    const result = await runAction(() => setCategoryVisibilityAction(categoryId, visible));
+    if (!result.ok) {
+      applyVisibility(category.visible);
+      showToast(result.error);
+    }
+  }
+
+  async function saveStoreSettings() {
+    if (saving) return;
+    setSaving(true);
+    const result = await runAction(() => saveStoreSettingsAction(storeSettings));
+    setSaving(false);
+    if (!result.ok) {
+      showToast(result.error);
+      return;
+    }
+    setStoreSettings(result.data);
+    showToast("Configurações da vitrine salvas.");
   }
 
   const currentLabel = SECTION_LABELS[section];
@@ -227,8 +328,8 @@ export function AdminDashboard() {
 
         <div className="px-5 py-6">
           <div className="border border-gold/20 bg-gold/[0.04] px-4 py-3">
-            <p className="text-[8px] tracking-[0.3em] text-gold uppercase">Ambiente demonstrativo</p>
-            <p className="mt-2 text-[11px] leading-relaxed text-ink-muted">Alterações ficam somente nesta sessão.</p>
+            <p className="text-[8px] tracking-[0.3em] text-gold uppercase">Conectado ao Supabase</p>
+            <p className="mt-2 text-[11px] leading-relaxed text-ink-muted">Alterações são salvas no banco de dados e refletem na loja.</p>
           </div>
         </div>
 
@@ -254,10 +355,17 @@ export function AdminDashboard() {
         </nav>
 
         <div className="border-t border-white/[0.07] p-5">
+          <p className="mb-4 truncate text-[10px] text-ink-faint" title={adminEmail}>{adminEmail}</p>
           <Link href="/loja" className="flex items-center justify-between text-[10px] tracking-[0.18em] text-ink-muted uppercase transition-colors hover:text-gold">
             Ver loja publicada
             <span aria-hidden="true">↗</span>
           </Link>
+          <form action={signOutAction} className="mt-4">
+            <button type="submit" className="flex w-full items-center justify-between text-[10px] tracking-[0.18em] text-ink-muted uppercase transition-colors hover:text-gold">
+              Sair
+              <span aria-hidden="true">→</span>
+            </button>
+          </form>
         </div>
       </aside>
 
@@ -279,8 +387,8 @@ export function AdminDashboard() {
 
           <div className="flex items-center gap-3">
             <span className="hidden items-center gap-2 text-[9px] tracking-[0.15em] text-ink-faint uppercase sm:flex">
-              <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-              Back-end desconectado
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+              Back-end conectado
             </span>
             <div className="flex h-9 w-9 items-center justify-center rounded-full border border-gold/25 bg-gold/[0.08] font-display text-sm text-gold">XC</div>
           </div>
@@ -306,6 +414,7 @@ export function AdminDashboard() {
           {section === "products" && (
             <ProductsSection
               products={visibleProducts}
+              categories={categories}
               query={productQuery}
               setQuery={setProductQuery}
               categoryFilter={categoryFilter}
@@ -332,7 +441,7 @@ export function AdminDashboard() {
             <CategoriesSection
               categories={categories}
               products={products}
-              setCategories={setCategories}
+              onToggleVisibility={toggleCategoryVisibility}
               onMove={moveCategory}
             />
           )}
@@ -341,7 +450,8 @@ export function AdminDashboard() {
             <StoreSettingsSection
               settings={storeSettings}
               setSettings={setStoreSettings}
-              onSave={() => showToast("Configurações da vitrine salvas no protótipo.")}
+              saving={saving}
+              onSave={saveStoreSettings}
             />
           )}
         </div>
@@ -350,7 +460,9 @@ export function AdminDashboard() {
       {draft && (
         <ProductEditor
           draft={draft}
-          setDraft={setDraft}
+          setDraft={(updater) => setDraft((current) => (current ? updater(current) : current))}
+          categories={categories}
+          saving={saving}
           isNew={isNewProduct}
           onClose={() => setDraft(null)}
           onSave={saveProduct}
@@ -362,7 +474,7 @@ export function AdminDashboard() {
           <div className="w-full max-w-md border border-white/10 bg-[#0a0a0a] p-7">
             <p className="eyebrow">Remover produto</p>
             <h2 className="mt-4 font-display text-3xl">Remover {pendingDelete.name}?</h2>
-            <p className="mt-4 text-sm leading-relaxed text-ink-muted">Esta ação afeta apenas o estado local desta demonstração.</p>
+            <p className="mt-4 text-sm leading-relaxed text-ink-muted">Esta ação remove o produto da loja e não pode ser desfeita.</p>
             <div className="mt-8 flex justify-end gap-3">
               <button type="button" onClick={() => setPendingDelete(null)} className="admin-button-secondary">Cancelar</button>
               <button type="button" onClick={confirmDelete} className="admin-button-danger">Remover</button>
@@ -435,13 +547,13 @@ function OverviewSection({ products, activeCount, featuredCount, lowStockProduct
   );
 }
 
-function ProductsSection({ products, query, setQuery, categoryFilter, setCategoryFilter, statusFilter, setStatusFilter, onNew, onEdit, onDelete, onToggleStatus }: { products: AdminProduct[]; query: string; setQuery: (value: string) => void; categoryFilter: string; setCategoryFilter: (value: string) => void; statusFilter: string; setStatusFilter: (value: string) => void; onNew: () => void; onEdit: (product: AdminProduct) => void; onDelete: (product: AdminProduct) => void; onToggleStatus: (id: string) => void }) {
+function ProductsSection({ products, categories, query, setQuery, categoryFilter, setCategoryFilter, statusFilter, setStatusFilter, onNew, onEdit, onDelete, onToggleStatus }: { products: AdminProduct[]; categories: AdminCategory[]; query: string; setQuery: (value: string) => void; categoryFilter: string; setCategoryFilter: (value: string) => void; statusFilter: string; setStatusFilter: (value: string) => void; onNew: () => void; onEdit: (product: AdminProduct) => void; onDelete: (product: AdminProduct) => void; onToggleStatus: (id: string) => void }) {
   return (
     <section className="admin-panel overflow-hidden">
       <div className="flex flex-col gap-5 border-b border-white/[0.07] p-5 md:p-6 xl:flex-row xl:items-center xl:justify-between">
         <div className="flex flex-1 flex-col gap-3 sm:flex-row">
           <label className="relative flex-1"><span className="sr-only">Buscar produto</span><AdminIcon kind="search" className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar por nome, marca ou categoria" className="admin-input pl-10" /></label>
-          <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)} className="admin-select sm:w-48"><option>Todos</option>{STORE_CATEGORIES.filter((item) => item !== "Todos").map((category) => <option key={category}>{category}</option>)}</select>
+          <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)} className="admin-select sm:w-48"><option>Todos</option>{categories.map((category) => <option key={category.id}>{category.name}</option>)}</select>
           <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="admin-select sm:w-40"><option value="all">Todos os status</option><option value="active">Publicado</option><option value="draft">Rascunho</option><option value="out-of-stock">Esgotado</option></select>
         </div>
         <button type="button" onClick={onNew} className="admin-button-primary shrink-0"><AdminIcon kind="plus" className="h-4 w-4" /> Novo produto</button>
@@ -507,7 +619,7 @@ function FeaturedSection({ featured, available, onToggle, onMove }: { featured: 
   );
 }
 
-function CategoriesSection({ categories, products, setCategories, onMove }: { categories: EditableCategory[]; products: AdminProduct[]; setCategories: (categories: EditableCategory[]) => void; onMove: (index: number, direction: -1 | 1) => void }) {
+function CategoriesSection({ categories, products, onToggleVisibility, onMove }: { categories: AdminCategory[]; products: AdminProduct[]; onToggleVisibility: (id: string) => void; onMove: (index: number, direction: -1 | 1) => void }) {
   return (
     <section className="admin-panel">
       <div className="admin-panel-header"><div><p className="admin-kicker">Menu da loja</p><h2 className="admin-title">Categorias e ordem de exibição</h2><p className="mt-2 text-xs text-ink-muted">Controle quais categorias aparecem para o cliente.</p></div></div>
@@ -515,8 +627,8 @@ function CategoriesSection({ categories, products, setCategories, onMove }: { ca
         {categories.map((category, index) => {
           const count = products.filter((product) => product.category === category.name).length;
           return (
-            <div key={category.name} className={`border p-5 transition-colors ${category.visible ? "border-white/[0.08] bg-white/[0.018]" : "border-white/[0.04] opacity-50"}`}>
-              <div className="flex items-start justify-between gap-4"><div><p className="font-display text-xl">{category.name}</p><p className="mt-2 text-[9px] tracking-[0.2em] text-ink-faint uppercase">{count} produtos</p></div><button type="button" onClick={() => setCategories(categories.map((item) => item.name === category.name ? { ...item, visible: !item.visible } : item))} className={`relative h-6 w-11 rounded-full transition-colors ${category.visible ? "bg-gold" : "bg-white/10"}`} aria-label={`${category.visible ? "Ocultar" : "Exibir"} ${category.name}`}><span className={`absolute top-1 h-4 w-4 rounded-full bg-black transition-transform ${category.visible ? "translate-x-6" : "translate-x-1"}`} /></button></div>
+            <div key={category.id} className={`border p-5 transition-colors ${category.visible ? "border-white/[0.08] bg-white/[0.018]" : "border-white/[0.04] opacity-50"}`}>
+              <div className="flex items-start justify-between gap-4"><div><p className="font-display text-xl">{category.name}</p><p className="mt-2 text-[9px] tracking-[0.2em] text-ink-faint uppercase">{count} produtos</p></div><button type="button" onClick={() => onToggleVisibility(category.id)} className={`relative h-6 w-11 rounded-full transition-colors ${category.visible ? "bg-gold" : "bg-white/10"}`} aria-label={`${category.visible ? "Ocultar" : "Exibir"} ${category.name}`}><span className={`absolute top-1 h-4 w-4 rounded-full bg-black transition-transform ${category.visible ? "translate-x-6" : "translate-x-1"}`} /></button></div>
               <div className="mt-6 flex items-center justify-between border-t border-white/[0.06] pt-4"><span className="text-[9px] text-ink-faint">POSIÇÃO {String(index + 1).padStart(2, "0")}</span><div className="flex gap-1"><button type="button" onClick={() => onMove(index, -1)} disabled={index === 0} className="admin-icon-button disabled:opacity-20">↑</button><button type="button" onClick={() => onMove(index, 1)} disabled={index === categories.length - 1} className="admin-icon-button disabled:opacity-20">↓</button></div></div>
             </div>
           );
@@ -526,12 +638,7 @@ function CategoriesSection({ categories, products, setCategories, onMove }: { ca
   );
 }
 
-type StoreSettings = ReturnType<typeof useStoreSettingsShape>;
-function useStoreSettingsShape() {
-  return { eyebrow: "", title: "", description: "", heroImage: "", announcementEnabled: true, announcement: "", whatsapp: "", instagram: "", address: "", openingHours: "", seoTitle: "", seoDescription: "" };
-}
-
-function StoreSettingsSection({ settings, setSettings, onSave }: { settings: StoreSettings; setSettings: (settings: StoreSettings) => void; onSave: () => void }) {
+function StoreSettingsSection({ settings, setSettings, saving, onSave }: { settings: StoreSettings; setSettings: (settings: StoreSettings) => void; saving: boolean; onSave: () => void }) {
   function update<K extends keyof StoreSettings>(key: K, value: StoreSettings[K]) { setSettings({ ...settings, [key]: value }); }
   return (
     <div className="grid gap-6 xl:grid-cols-[1.2fr_.8fr]">
@@ -542,16 +649,51 @@ function StoreSettingsSection({ settings, setSettings, onSave }: { settings: Sto
       </div>
 
       <div className="space-y-6">
-        <section className="admin-panel overflow-hidden"><div className="relative aspect-[4/3] bg-surface-2"><Image src={settings.heroImage || "/images/store/xavier-category-clothing.webp"} alt="Prévia do hero" fill sizes="(min-width: 1280px) 35vw, 100vw" className="object-cover" /><div className="absolute inset-0 bg-black/50" /><div className="absolute inset-x-6 bottom-6"><p className="text-[8px] tracking-[0.25em] text-gold uppercase">{settings.eyebrow}</p><p className="mt-2 font-display text-4xl leading-none">{settings.title}</p></div></div><div className="p-5"><p className="text-[9px] tracking-[0.25em] text-ink-faint uppercase">Prévia da vitrine</p></div></section>
+        <section className="admin-panel overflow-hidden"><div className="relative aspect-[4/3] bg-surface-2"><Image src={safeImageSrc(settings.heroImage, getProductImagesPublicPrefixSafe())} alt="Prévia do hero" fill sizes="(min-width: 1280px) 35vw, 100vw" className="object-cover" /><div className="absolute inset-0 bg-black/50" /><div className="absolute inset-x-6 bottom-6"><p className="text-[8px] tracking-[0.25em] text-gold uppercase">{settings.eyebrow}</p><p className="mt-2 font-display text-4xl leading-none">{settings.title}</p></div></div><div className="p-5"><p className="text-[9px] tracking-[0.25em] text-ink-faint uppercase">Prévia da vitrine</p></div></section>
         <section className="admin-panel p-6"><p className="admin-kicker">Busca e compartilhamento</p><h2 className="admin-title mt-2">SEO básico</h2><div className="mt-6 grid gap-5"><AdminField label="Título da página"><input value={settings.seoTitle} onChange={(e) => update("seoTitle", e.target.value)} className="admin-input" /></AdminField><AdminField label="Descrição"><textarea value={settings.seoDescription} onChange={(e) => update("seoDescription", e.target.value)} className="admin-textarea" rows={4} /></AdminField></div></section>
-        <button type="button" onClick={onSave} className="admin-button-primary w-full justify-center py-4">Salvar configurações</button>
+        <button type="button" onClick={onSave} disabled={saving} className="admin-button-primary w-full justify-center py-4 disabled:cursor-not-allowed disabled:opacity-40">{saving ? "Salvando…" : "Salvar configurações"}</button>
       </div>
     </div>
   );
 }
 
-function ProductEditor({ draft, setDraft, isNew, onClose, onSave }: { draft: AdminProduct; setDraft: (product: AdminProduct) => void; isNew: boolean; onClose: () => void; onSave: () => void }) {
-  function update<K extends keyof AdminProduct>(key: K, value: AdminProduct[K]) { setDraft({ ...draft, [key]: value }); }
+function ProductEditor({ draft, setDraft, categories, saving, isNew, onClose, onSave }: { draft: AdminProduct; setDraft: (updater: (product: AdminProduct) => AdminProduct) => void; categories: AdminCategory[]; saving: boolean; isNew: boolean; onClose: () => void; onSave: () => void }) {
+  // Atualização funcional: o upload de imagem termina depois de um await e não pode
+  // sobrescrever edições feitas em outros campos nesse intervalo.
+  function update<K extends keyof AdminProduct>(key: K, value: AdminProduct[K]) { setDraft((current) => ({ ...current, [key]: value })); }
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState("");
+  // O preview nunca recebe um src que o next/image não consiga renderizar (host não autorizado lança erro).
+  const previewSrc = safeImageSrc(draft.image, getProductImagesPublicPrefixSafe());
+
+  async function handleFile(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    const extension = UPLOAD_EXTENSIONS[file.type];
+    if (!extension) { setUploadError("Use uma imagem JPG, PNG, WebP ou AVIF."); return; }
+    if (file.size > UPLOAD_MAX_BYTES) { setUploadError("A imagem precisa ter até 5 MB."); return; }
+
+    setUploading(true);
+    setUploadError("");
+    try {
+      const supabase = createClient();
+      const path = `products/${crypto.randomUUID()}.${extension}`;
+      const { error } = await supabase.storage
+        .from("product-images")
+        .upload(path, file, { contentType: file.type, cacheControl: "31536000", upsert: false });
+      if (error) throw error;
+      const { data } = supabase.storage.from("product-images").getPublicUrl(path);
+      update("image", data.publicUrl);
+    } catch {
+      setUploadError("Não foi possível enviar a imagem. Tente novamente.");
+    } finally {
+      setUploading(false);
+    }
+  }
+
   const promotionEnabled = draft.originalPrice !== undefined;
   const promotionInvalid = promotionEnabled && draft.originalPrice! <= draft.price;
   const discount = promotionEnabled && !promotionInvalid
@@ -563,11 +705,17 @@ function ProductEditor({ draft, setDraft, isNew, onClose, onSave }: { draft: Adm
       <aside className="absolute right-0 top-0 z-10 flex h-full w-full max-w-xl flex-col border-l border-white/10 bg-[#090909]">
         <div className="flex items-center justify-between border-b border-white/[0.07] px-6 py-5"><div><p className="admin-kicker">{isNew ? "Cadastro" : "Catálogo"}</p><h2 className="mt-1 font-display text-2xl">{isNew ? "Novo produto" : "Editar produto"}</h2></div><button type="button" onClick={onClose} className="admin-icon-button" aria-label="Fechar"><AdminIcon kind="close" className="h-5 w-5" /></button></div>
         <div className="flex-1 overflow-y-auto p-6">
-          <div className="relative mb-6 aspect-[16/8] overflow-hidden border border-white/[0.07] bg-[#0d0d0d]"><Image src={draft.image || EMPTY_PRODUCT.image} alt="Prévia do produto" fill sizes="576px" className={draft.imageFit === "contain" ? "object-contain p-8" : "object-cover"} /></div>
+          <div className="relative mb-6 aspect-[16/8] overflow-hidden border border-white/[0.07] bg-[#0d0d0d]"><Image src={previewSrc} alt="Prévia do produto" fill sizes="576px" className={draft.imageFit === "contain" ? "object-contain p-8" : "object-cover"} /></div>
+          <div className="-mt-3 mb-6 flex flex-wrap items-center gap-3">
+            <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/avif" onChange={handleFile} className="hidden" />
+            <button type="button" onClick={() => fileInputRef.current?.click()} disabled={uploading} className="admin-button-secondary disabled:cursor-not-allowed disabled:opacity-40">{uploading ? "Enviando…" : "Enviar imagem"}</button>
+            <span className="text-[10px] text-ink-faint">JPG, PNG, WebP ou AVIF · até 5 MB</span>
+            {uploadError && <p role="alert" className="w-full text-[10px] text-red-300">{uploadError}</p>}
+          </div>
           <div className="grid gap-5 md:grid-cols-2">
             <AdminField label="Nome do produto" className="md:col-span-2"><input value={draft.name} onChange={(e) => update("name", e.target.value)} className="admin-input" placeholder="Nome do produto" /></AdminField>
             <AdminField label="Marca"><input value={draft.brand} onChange={(e) => update("brand", e.target.value)} className="admin-input" /></AdminField>
-            <AdminField label="Categoria"><select value={draft.category} onChange={(e) => update("category", e.target.value as StoreCategory)} className="admin-select w-full">{STORE_CATEGORIES.filter((item) => item !== "Todos").map((category) => <option key={category}>{category}</option>)}</select></AdminField>
+            <AdminField label="Categoria"><select value={draft.category} onChange={(e) => update("category", e.target.value)} className="admin-select w-full">{categories.map((category) => <option key={category.id}>{category.name}</option>)}</select></AdminField>
             <AdminField label="Preço de venda"><input type="number" min="0" step="0.01" value={draft.price} onChange={(e) => update("price", Number(e.target.value))} className="admin-input" /></AdminField>
             <AdminField label="Estoque"><input type="number" min="0" value={draft.stock} onChange={(e) => update("stock", Number(e.target.value))} className="admin-input" /></AdminField>
             <AdminField label="Status"><select value={draft.status} onChange={(e) => update("status", e.target.value as ProductStatus)} className="admin-select w-full"><option value="active">Publicado</option><option value="draft">Rascunho</option><option value="out-of-stock">Esgotado</option></select></AdminField>
@@ -586,7 +734,7 @@ function ProductEditor({ draft, setDraft, isNew, onClose, onSave }: { draft: Adm
             <label className="flex cursor-pointer items-center justify-between border border-white/[0.07] p-4 md:col-span-2"><div><p className="text-xs text-ink">Produto em destaque</p><p className="mt-1 text-[10px] text-ink-faint">Exibir com prioridade na vitrine</p></div><input type="checkbox" checked={draft.isFeatured} onChange={(e) => update("isFeatured", e.target.checked)} className="h-4 w-4 accent-[#c8a45d]" /></label>
           </div>
         </div>
-        <div className="flex justify-end gap-3 border-t border-white/[0.07] p-5"><button type="button" onClick={onClose} className="admin-button-secondary">Cancelar</button><button type="button" onClick={onSave} disabled={!draft.name.trim() || !draft.brand.trim() || promotionInvalid} className="admin-button-primary disabled:cursor-not-allowed disabled:opacity-40">{isNew ? "Criar produto" : "Salvar alterações"}</button></div>
+        <div className="flex justify-end gap-3 border-t border-white/[0.07] p-5"><button type="button" onClick={onClose} className="admin-button-secondary">Cancelar</button><button type="button" onClick={onSave} disabled={saving || uploading || !draft.name.trim() || !draft.brand.trim() || promotionInvalid} className="admin-button-primary disabled:cursor-not-allowed disabled:opacity-40">{saving ? "Salvando…" : isNew ? "Criar produto" : "Salvar alterações"}</button></div>
       </aside>
     </div>
   );
