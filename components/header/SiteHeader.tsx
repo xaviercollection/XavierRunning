@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useCart } from "@/components/cart/CartProvider";
 
 const NAV_LINKS = [
   { label: "Novidades", href: "#colecao-roupas" },
@@ -13,6 +14,7 @@ export function SiteHeader() {
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const tickingRef = useRef(false);
+  const { count: cartCount } = useCart();
 
   useEffect(() => {
     const onScroll = () => {
@@ -77,10 +79,15 @@ export function SiteHeader() {
         <div className="flex items-center gap-6 lg:gap-9">
           <a
             href="/loja"
-            aria-label="Explorar a loja"
-            className="hidden h-9 w-9 items-center justify-center text-ink-muted transition-colors duration-300 hover:text-gold md:flex"
+            aria-label={cartCount > 0 ? `Abrir a loja — sacola com ${cartCount} itens` : "Explorar a loja"}
+            className="relative hidden h-9 w-9 items-center justify-center text-ink-muted transition-colors duration-300 hover:text-gold md:flex"
           >
             <BagIcon />
+            {cartCount > 0 && (
+              <span className="absolute right-0 top-0 flex h-4 min-w-4 items-center justify-center rounded-full bg-gold px-1 text-[8px] font-medium text-black">
+                {cartCount}
+              </span>
+            )}
           </a>
 
           <button

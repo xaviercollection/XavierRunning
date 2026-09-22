@@ -8,10 +8,18 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getProductImagesPublicPrefix } from "@/lib/supabase/env";
 import { createClient } from "@/lib/supabase/server";
-import { ADMIN_PRODUCT_COLUMNS, PRODUCT_IMAGES_BUCKET } from "./columns";
-import { toAdminProduct, toStoreSettings, type ProductRow, type StoreSettingsRow } from "./mappers";
+import { ADMIN_PRODUCT_COLUMNS, CATEGORY_COLUMNS, PRODUCT_IMAGES_BUCKET } from "./columns";
+import {
+  toAdminCategory,
+  toAdminProduct,
+  toStoreSettings,
+  type CategoryRow,
+  type ProductRow,
+  type StoreSettingsRow,
+} from "./mappers";
 import type {
   ActionResult,
+  AdminCategory,
   AdminProduct,
   FeaturedState,
   ProductStatus,
@@ -251,6 +259,99 @@ export async function reorderCategoriesAction(ids: string[]): Promise<ActionResu
     const { error } = await supabase.rpc("reorder_categories", { p_ids: ids });
     if (error) return fail(describeDbError(error));
     return done(null);
+  });
+}
+
+function readCategoryName(name: unknown): string | null {
+  const trimmed = typeof name === "string" ? name.trim() : "";
+  return trimmed.length > 0 && trimmed.length <= 60 ? trimmed : null;
+}
+
+/** Entra no fim da lista (maior sort_order + 1), como o lojista já vê as demais categorias. */
+async function nextCategorySortOrder(supabase: SupabaseClient): Promise<number> {
+  const { data } = await supabase
+    .from("categories")
+    .select("sort_order")
+    .order("sort_order", { ascending: false })
+    .limit(1)
+    .maybeSingle<{ sort_order: number }>();
+  return (data?.sort_order ?? -1) + 1;
+}
+
+export async function createCategoryAction(name: unknown): Promise<ActionResult<AdminCategory>> {
+  const trimmed = readCategoryName(name);
+  if (!trimmed) return fail("Informe um nome de categoria válido (até 60 caracteres).");
+
+  return withAdmin(async (supabase) => {
+    const sortOrder = await nextCategorySortOrder(supabase);
+    const baseSlug = slugify(trimmed);
+
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      const { data, error } = await supabase
+        .from("categories")
+        .insert({ name: trimmed, slug: slugCandidate(baseSlug, attempt), sort_order: sortOrder })
+        .select(CATEGORY_COLUMNS.join(","))
+        .single<CategoryRow>();
+      if (!error) return done(toAdminCategory(data));
+      if (error.code === "23505" && error.message.includes("categories_name_key")) {
+        return fail("Já existe uma categoria com esse nome.");
+      }
+      if (error.code !== "23505" || attempt === 3) return fail(describeDbError(error));
+      // Colisão de slug (nomes diferentes que normalizam igual): tenta o próximo candidato.
+    }
+    return fail("Não foi possível criar a categoria.");
+  });
+}
+
+export async function renameCategoryAction(id: string, name: unknown): Promise<ActionResult<AdminCategory>> {
+  if (!isUuid(id)) return fail("Identificador de categoria inválido.");
+  const trimmed = readCategoryName(name);
+  if (!trimmed) return fail("Informe um nome de categoria válido (até 60 caracteres).");
+
+  return withAdmin(async (supabase) => {
+    const { data, error } = await supabase
+      .from("categories")
+      .update({ name: trimmed })
+      .eq("id", id)
+      .select(CATEGORY_COLUMNS.join(","))
+      .maybeSingle<CategoryRow>();
+    if (error) {
+      if (error.code === "23505") return fail("Já existe uma categoria com esse nome.");
+      return fail(describeDbError(error));
+    }
+    if (!data) return fail("Categoria não encontrada.");
+    return done(toAdminCategory(data));
+  });
+}
+
+/**
+ * A FK products.category_id já é ON DELETE RESTRICT (nunca apaga produto junto): esta action só
+ * adianta uma mensagem específica antes de bater nesse limite, contando os produtos da categoria.
+ */
+export async function deleteCategoryAction(id: string): Promise<ActionResult<{ id: string }>> {
+  if (!isUuid(id)) return fail("Identificador de categoria inválido.");
+
+  return withAdmin(async (supabase) => {
+    const { count, error: countError } = await supabase
+      .from("products")
+      .select("id", { count: "exact", head: true })
+      .eq("category_id", id);
+    if (countError) return fail(describeDbError(countError));
+    if ((count ?? 0) > 0) {
+      return fail(
+        `Não é possível remover: existem ${count} produto${count === 1 ? "" : "s"} nesta categoria.`,
+      );
+    }
+
+    const { data, error } = await supabase.from("categories").delete().eq("id", id).select("id");
+    if (error) {
+      if (error.code === "23503" || error.code === "23001") {
+        return fail("Não é possível remover: existem produtos associados a esta categoria.");
+      }
+      return fail(describeDbError(error));
+    }
+    if (!data || data.length === 0) return fail("Categoria não encontrada.");
+    return done({ id });
   });
 }
 

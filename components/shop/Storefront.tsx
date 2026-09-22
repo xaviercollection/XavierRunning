@@ -3,11 +3,12 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { CartDrawer } from "@/components/cart/CartDrawer";
+import { useCart } from "@/components/cart/CartProvider";
 import { formatStorePrice, type StoreProduct } from "@/lib/storeCatalog";
-import { buildWhatsAppUrl, resolveWhatsappNumber } from "@/lib/store/whatsapp";
+import { defaultVariant, isProductSoldOut, productRequiresVariant, type CartVariant } from "@/lib/store/cart";
 
 type SortMode = "featured" | "price-asc" | "price-desc" | "popular";
-type CartLine = { productId: string; size: string; quantity: number };
 
 const COLOR_FILTERS = ["Preto", "Areia", "Azul", "Verde", "Branco", "Marrom", "Dourado"];
 
@@ -34,12 +35,14 @@ export function Storefront({ products: catalog, categories, hero, whatsapp }: St
   const [cartOpen, setCartOpen] = useState(false);
   const [quickView, setQuickView] = useState<StoreProduct | null>(null);
   const [quickSize, setQuickSize] = useState("");
+  const [quickColor, setQuickColor] = useState("");
   const [selectedBrands, setSelectedBrands] = useState<string[]>([]);
   const [selectedSizes, setSelectedSizes] = useState<string[]>([]);
   const [selectedColor, setSelectedColor] = useState("");
   const [priceLimit, setPriceLimit] = useState<number | null>(null);
   const [favorites, setFavorites] = useState<string[]>([]);
-  const [cart, setCart] = useState<CartLine[]>([]);
+  const [feedback, setFeedback] = useState("");
+  const { count: cartCount, addItem } = useCart();
 
   const brands = useMemo(
     () => Array.from(new Set(catalog.map((product) => product.brand))).sort(),
@@ -141,20 +144,6 @@ export function Storefront({ products: catalog, categories, hero, whatsapp }: St
     [products],
   );
 
-  const cartDetails = useMemo(
-    () =>
-      cart.flatMap((line) => {
-        const product = catalog.find((item) => item.id === line.productId);
-        return product ? [{ ...line, product }] : [];
-      }),
-    [cart, catalog],
-  );
-
-  const cartCount = cart.reduce((total, item) => total + item.quantity, 0);
-  const cartTotal = cartDetails.reduce(
-    (total, item) => total + item.product.price * item.quantity,
-    0,
-  );
   const activeFilterCount =
     selectedBrands.length +
     selectedSizes.length +
@@ -176,55 +165,47 @@ export function Storefront({ products: catalog, categories, hero, whatsapp }: St
     setPriceLimit(null);
   }
 
-  function openProduct(product: StoreProduct) {
-    setQuickSize(product.sizes[0] ?? "Único");
-    setQuickView(product);
+  function showFeedback(message: string) {
+    setFeedback(message);
+    window.setTimeout(() => setFeedback(""), 2600);
   }
 
-  function addToCart(product: StoreProduct, size: string) {
-    if (product.badge === "Esgotado") return;
-    setCart((current) => {
-      const existing = current.find(
-        (line) => line.productId === product.id && line.size === size,
-      );
-      if (existing) {
-        return current.map((line) =>
-          line === existing ? { ...line, quantity: line.quantity + 1 } : line,
-        );
-      }
-      return [...current, { productId: product.id, size, quantity: 1 }];
-    });
-    setQuickView(null);
-    setCartOpen(true);
+  function feedbackForResult(productName: string, result: { ok: boolean; reason?: "sold-out" | "max-stock" }) {
+    if (result.ok) return `${productName} adicionada à sacola.`;
+    return result.reason === "max-stock"
+      ? "Quantidade máxima em estoque já está na sacola."
+      : "Produto esgotado.";
   }
 
-  function changeQuantity(productId: string, size: string, amount: number) {
-    setCart((current) =>
-      current.flatMap((line) => {
-        if (line.productId !== productId || line.size !== size) return [line];
-        const quantity = line.quantity + amount;
-        return quantity > 0 ? [{ ...line, quantity }] : [];
-      }),
-    );
+  // CTA "Adicionar à sacola" do card: produto sem variação obrigatória entra direto na sacola;
+  // produto com mais de um tamanho e/ou mais de uma cor abre o mesmo modal de detalhes para
+  // que o cliente escolha antes de confirmar (o volume nunca é uma escolha do cliente).
+  function handleAddToBagClick(product: StoreProduct) {
+    if (isProductSoldOut(product)) return;
+    if (productRequiresVariant(product)) {
+      setQuickSize("");
+      setQuickColor("");
+      setQuickView(product);
+      return;
+    }
+    const result = addItem({ product, variant: defaultVariant(product), quantity: 1 });
+    showFeedback(feedbackForResult(product.name, result));
   }
 
-  // Finaliza pelo WhatsApp. Nada é gravado no banco e o estoque NÃO é alterado: o pedido é só
-  // uma mensagem; o lojista confirma disponibilidade e baixa o estoque manualmente no painel.
-  function checkoutOnWhatsApp() {
-    if (cartDetails.length === 0) return;
-    const url = buildWhatsAppUrl(
-      resolveWhatsappNumber(whatsapp),
-      cartDetails.map((line) => ({
-        name: line.product.name,
-        brand: line.product.brand,
-        category: line.product.category,
-        size: line.size,
-        quantity: line.quantity,
-        unitPrice: line.product.price,
-      })),
-    );
-    const opened = window.open(url, "_blank", "noopener,noreferrer");
-    if (!opened) window.location.assign(url);
+  function confirmAddFromQuickView() {
+    if (!quickView) return;
+    const needsSize = quickView.sizes.length > 1;
+    const needsColor = quickView.colors.length > 1;
+    if ((needsSize && !quickSize) || (needsColor && !quickColor)) return;
+
+    const fallback = defaultVariant(quickView);
+    const variant: CartVariant = {
+      size: needsSize ? quickSize : fallback.size,
+      color: needsColor ? quickColor : fallback.color,
+    };
+    const result = addItem({ product: quickView, variant, quantity: 1 });
+    showFeedback(feedbackForResult(quickView.name, result));
+    if (result.ok) setQuickView(null);
   }
 
   return (
@@ -474,7 +455,7 @@ export function Storefront({ products: catalog, categories, hero, whatsapp }: St
                     onFavorite={(productId) =>
                       toggleListValue(productId, favorites, setFavorites)
                     }
-                    onOpen={openProduct}
+                    onAddToBag={handleAddToBagClick}
                     highlighted
                   />
                 )}
@@ -487,7 +468,7 @@ export function Storefront({ products: catalog, categories, hero, whatsapp }: St
                     onFavorite={(productId) =>
                       toggleListValue(productId, favorites, setFavorites)
                     }
-                    onOpen={openProduct}
+                    onAddToBag={handleAddToBagClick}
                   />
                 ))}
               </div>
@@ -500,7 +481,7 @@ export function Storefront({ products: catalog, categories, hero, whatsapp }: St
                     index={index}
                     favorite={favorites.includes(product.id)}
                     onFavorite={() => toggleListValue(product.id, favorites, setFavorites)}
-                    onOpen={() => openProduct(product)}
+                    onAddToBag={() => handleAddToBagClick(product)}
                   />
                 ))}
               </div>
@@ -560,103 +541,89 @@ export function Storefront({ products: catalog, categories, hero, whatsapp }: St
               <h2 className="mt-4 font-display text-[clamp(2.6rem,5vw,4.8rem)] leading-[0.94] tracking-[-0.045em]">
                 {quickView.name}
               </h2>
-              <p className="mt-5 text-xl text-champagne">{formatStorePrice(quickView.price)}</p>
+              <p className="mt-5 flex items-baseline gap-3 text-xl text-champagne">
+                {formatStorePrice(quickView.price)}
+                {quickView.volumeMl && (
+                  <span className="text-sm tracking-[0.12em] text-ink-faint uppercase">{quickView.volumeMl}ml</span>
+                )}
+              </p>
               <p className="mt-6 max-w-md text-sm leading-relaxed text-ink-muted">{quickView.description}</p>
 
-              <div className="mt-8">
-                <p className="text-[9px] tracking-[0.3em] text-ink-faint uppercase">Cores</p>
-                <div className="mt-3 flex gap-3">
-                  {quickView.colors.map((color) => (
-                    <span key={color.name} className="flex items-center gap-2 text-[10px] text-ink-muted">
-                      <span className="h-4 w-4 rounded-full border border-white/20" style={{ backgroundColor: color.hex }} />
-                      {color.name}
-                    </span>
-                  ))}
+              {quickView.colors.length > 1 ? (
+                <div className="mt-8">
+                  <p className="text-[9px] tracking-[0.3em] text-ink-faint uppercase">Selecione a cor</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {quickView.colors.map((color) => (
+                      <button
+                        key={color.name}
+                        type="button"
+                        onClick={() => setQuickColor(color.name)}
+                        aria-pressed={quickColor === color.name}
+                        className={`flex items-center gap-2 border px-3 py-2 text-[10px] transition-colors ${quickColor === color.name ? "border-gold bg-gold/10 text-gold" : "border-white/15 text-ink-muted hover:border-white/40"}`}
+                      >
+                        <span className="h-3.5 w-3.5 rounded-full border border-white/20" style={{ backgroundColor: color.hex }} />
+                        {color.name}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
-
-              <div className="mt-8">
-                <p className="text-[9px] tracking-[0.3em] text-ink-faint uppercase">Selecione o tamanho</p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {quickView.sizes.map((size) => (
-                    <button key={size} type="button" onClick={() => setQuickSize(size)} className={`min-w-11 border px-3 py-2.5 text-[10px] ${quickSize === size ? "border-gold bg-gold text-black" : "border-white/15 text-ink-muted hover:border-white/40"}`}>
-                      {size}
-                    </button>
-                  ))}
+              ) : quickView.colors.length === 1 ? (
+                <div className="mt-8">
+                  <p className="text-[9px] tracking-[0.3em] text-ink-faint uppercase">Cor</p>
+                  <p className="mt-3 flex items-center gap-2 text-[10px] text-ink-muted">
+                    <span className="h-4 w-4 rounded-full border border-white/20" style={{ backgroundColor: quickView.colors[0].hex }} />
+                    {quickView.colors[0].name}
+                  </p>
                 </div>
-              </div>
+              ) : null}
 
-              <button
-                type="button"
-                disabled={quickView.badge === "Esgotado"}
-                onClick={() => addToCart(quickView, quickSize)}
-                className="btn-xc btn-xc-gold mt-10 justify-center disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/5 disabled:text-ink-faint"
-              >
-                {quickView.badge === "Esgotado" ? "Produto esgotado" : "Adicionar à sacola"}
-              </button>
+              {quickView.sizes.length > 1 && (
+                <div className="mt-8">
+                  <p className="text-[9px] tracking-[0.3em] text-ink-faint uppercase">Selecione o tamanho</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {quickView.sizes.map((size) => (
+                      <button key={size} type="button" onClick={() => setQuickSize(size)} aria-pressed={quickSize === size} className={`min-w-11 border px-3 py-2.5 text-[10px] ${quickSize === size ? "border-gold bg-gold text-black" : "border-white/15 text-ink-muted hover:border-white/40"}`}>
+                        {size}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {(() => {
+                const soldOut = isProductSoldOut(quickView);
+                const missingSize = quickView.sizes.length > 1 && !quickSize;
+                const missingColor = quickView.colors.length > 1 && !quickColor;
+                const label = soldOut
+                  ? "Produto esgotado"
+                  : missingSize
+                    ? "Selecione um tamanho"
+                    : missingColor
+                      ? "Selecione uma cor"
+                      : "Adicionar à sacola";
+                return (
+                  <button
+                    type="button"
+                    disabled={soldOut || missingSize || missingColor}
+                    onClick={confirmAddFromQuickView}
+                    className="btn-xc btn-xc-gold mt-10 justify-center disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/5 disabled:text-ink-faint"
+                  >
+                    {label}
+                  </button>
+                );
+              })()}
             </div>
           </div>
         </div>
       )}
 
-      <div className={`fixed inset-0 z-[100] transition ${cartOpen ? "pointer-events-auto" : "pointer-events-none"}`} aria-hidden={!cartOpen}>
-        <button type="button" onClick={() => setCartOpen(false)} className={`absolute inset-0 bg-black/70 backdrop-blur-sm transition-opacity duration-500 ${cartOpen ? "opacity-100" : "opacity-0"}`} aria-label="Fechar sacola" />
-        <aside className={`absolute right-0 top-0 flex h-full w-full max-w-md flex-col border-l border-white/10 bg-[#080808] transition-transform duration-700 [transition-timing-function:var(--ease-xavier)] ${cartOpen ? "translate-x-0" : "translate-x-full"}`} aria-label="Sacola de compras">
-          <div className="flex items-center justify-between border-b border-white/10 px-6 py-6">
-            <div>
-              <p className="eyebrow">Sua seleção</p>
-              <h2 className="mt-2 font-display text-3xl">Sacola ({cartCount})</h2>
-            </div>
-            <button type="button" onClick={() => setCartOpen(false)} className="p-2 text-ink-muted hover:text-ink" aria-label="Fechar sacola">
-              <CloseIcon className="h-5 w-5" />
-            </button>
-          </div>
+      <CartDrawer open={cartOpen} onClose={() => setCartOpen(false)} whatsapp={whatsapp} />
 
-          <div className="flex-1 overflow-y-auto px-6 py-6">
-            {cartDetails.length === 0 ? (
-              <div className="flex h-full flex-col items-center justify-center text-center">
-                <BagIcon className="h-9 w-9 text-gold/50" />
-                <p className="mt-5 font-display text-2xl">Sua sacola está vazia.</p>
-                <p className="mt-2 max-w-xs text-sm text-ink-muted">Explore a coleção e escolha as peças que combinam com sua presença.</p>
-                <button type="button" onClick={() => setCartOpen(false)} className="btn-xc mt-8">Continuar explorando</button>
-              </div>
-            ) : (
-              <div className="space-y-6">
-                {cartDetails.map((line) => (
-                  <div key={`${line.productId}-${line.size}`} className="grid grid-cols-[88px_1fr] gap-4 border-b border-white/[0.07] pb-6">
-                    <div className="relative aspect-[3/4] overflow-hidden bg-surface-2">
-                      <Image src={line.product.image} alt="" fill sizes="88px" className={line.product.imageFit === "contain" ? "object-contain p-2" : "object-cover"} style={{ objectPosition: line.product.imagePosition ?? "50% 45%" }} />
-                    </div>
-                    <div className="flex min-w-0 flex-col">
-                      <p className="text-[9px] tracking-[0.25em] text-gold uppercase">{line.product.brand}</p>
-                      <h3 className="mt-1 font-display text-xl leading-tight">{line.product.name}</h3>
-                      <p className="mt-1 text-[10px] text-ink-faint">Tamanho {line.size}</p>
-                      <div className="mt-auto flex items-end justify-between gap-3 pt-4">
-                        <div className="flex items-center border border-white/10">
-                          <button type="button" onClick={() => changeQuantity(line.productId, line.size, -1)} className="h-8 w-8 text-ink-muted hover:text-gold" aria-label="Diminuir quantidade">−</button>
-                          <span className="w-7 text-center text-[10px]">{line.quantity}</span>
-                          <button type="button" onClick={() => changeQuantity(line.productId, line.size, 1)} className="h-8 w-8 text-ink-muted hover:text-gold" aria-label="Aumentar quantidade">+</button>
-                        </div>
-                        <span className="text-sm text-champagne">{formatStorePrice(line.product.price * line.quantity)}</span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {cartDetails.length > 0 && (
-            <div className="border-t border-white/10 p-6">
-              <div className="flex items-end justify-between">
-                <span className="text-[10px] tracking-[0.25em] text-ink-muted uppercase">Subtotal</span>
-                <span className="font-display text-3xl text-champagne">{formatStorePrice(cartTotal)}</span>
-              </div>
-              <p className="mt-3 text-[10px] leading-relaxed text-ink-faint">Frete e condições serão definidos na etapa de atendimento.</p>
-              <button type="button" onClick={checkoutOnWhatsApp} className="btn-xc btn-xc-gold mt-6 w-full justify-center">Continuar atendimento</button>
-            </div>
-          )}
-        </aside>
+      <div
+        role="status"
+        className={`fixed bottom-6 right-6 z-[120] border border-gold/25 bg-[#111] px-5 py-3 text-[11px] text-champagne shadow-2xl transition-all duration-500 ${feedback ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-4 opacity-0"}`}
+      >
+        {feedback}
       </div>
     </main>
   );
@@ -668,7 +635,7 @@ function CategoryCarousel({
   products,
   favorites,
   onFavorite,
-  onOpen,
+  onAddToBag,
   highlighted = false,
 }: {
   title: string;
@@ -676,7 +643,7 @@ function CategoryCarousel({
   products: StoreProduct[];
   favorites: string[];
   onFavorite: (productId: string) => void;
-  onOpen: (product: StoreProduct) => void;
+  onAddToBag: (product: StoreProduct) => void;
   highlighted?: boolean;
 }) {
   const railRef = useRef<HTMLDivElement>(null);
@@ -780,7 +747,7 @@ function CategoryCarousel({
               index={index}
               favorite={favorites.includes(product.id)}
               onFavorite={() => onFavorite(product.id)}
-              onOpen={() => onOpen(product)}
+              onAddToBag={() => onAddToBag(product)}
             />
           </div>
         ))}
@@ -789,7 +756,22 @@ function CategoryCarousel({
   );
 }
 
-function ProductCard({ product, index, favorite, onFavorite, onOpen }: { product: StoreProduct; index: number; favorite: boolean; onFavorite: () => void; onOpen: () => void }) {
+function ProductCard({
+  product,
+  index,
+  favorite,
+  onFavorite,
+  onAddToBag,
+}: {
+  product: StoreProduct;
+  index: number;
+  favorite: boolean;
+  onFavorite: () => void;
+  onAddToBag: () => void;
+}) {
+  const soldOut = isProductSoldOut(product);
+  const effectiveBadge = soldOut ? "Esgotado" : product.badge;
+  const ctaLabel = soldOut ? "Esgotado" : "Adicionar à sacola";
   return (
     <article className="store-card-enter group min-w-0" style={{ animationDelay: `${Math.min(index, 7) * 70}ms` }}>
       <div className="relative aspect-[3/4] overflow-hidden bg-[#0a0a0a]">
@@ -803,16 +785,16 @@ function ProductCard({ product, index, favorite, onFavorite, onOpen }: { product
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/35 via-transparent to-black/10" />
 
-        {(product.badge || product.originalPrice) && (
+        {(effectiveBadge || product.originalPrice) && (
           <div className="absolute left-3 top-3 flex flex-col items-start gap-1.5 md:left-4 md:top-4">
             {product.originalPrice && product.originalPrice > product.price && (
               <span className="bg-gold px-2.5 py-1.5 text-[8px] tracking-[0.25em] text-black uppercase shadow-[0_8px_30px_rgba(200,164,93,.18)]">
                 Em promoção
               </span>
             )}
-            {product.badge && (
-              <span className={`px-2.5 py-1.5 text-[8px] tracking-[0.25em] uppercase backdrop-blur-md ${product.badge === "Esgotado" ? "bg-black/70 text-ink-muted" : "bg-champagne text-black"}`}>
-                {product.badge}
+            {effectiveBadge && (
+              <span className={`px-2.5 py-1.5 text-[8px] tracking-[0.25em] uppercase backdrop-blur-md ${effectiveBadge === "Esgotado" ? "bg-black/70 text-ink-muted" : "bg-champagne text-black"}`}>
+                {effectiveBadge}
               </span>
             )}
           </div>
@@ -822,8 +804,13 @@ function ProductCard({ product, index, favorite, onFavorite, onOpen }: { product
           <HeartIcon className="h-4 w-4" filled={favorite} />
         </button>
 
-        <button type="button" onClick={onOpen} className="absolute inset-x-3 bottom-3 translate-y-3 border border-white/20 bg-black/70 py-3 text-[9px] tracking-[0.28em] text-ink uppercase opacity-0 backdrop-blur-md transition-all duration-500 group-hover:translate-y-0 group-hover:opacity-100 focus:translate-y-0 focus:opacity-100 md:inset-x-4 md:bottom-4">
-          Ver produto
+        <button
+          type="button"
+          onClick={onAddToBag}
+          disabled={soldOut}
+          className="absolute inset-x-3 bottom-3 translate-y-3 border border-white/20 bg-black/70 py-3 text-[9px] tracking-[0.28em] text-ink uppercase opacity-0 backdrop-blur-md transition-all duration-500 group-hover:translate-y-0 group-hover:opacity-100 focus:translate-y-0 focus:opacity-100 disabled:cursor-not-allowed disabled:opacity-70 md:inset-x-4 md:bottom-4"
+        >
+          {ctaLabel}
         </button>
       </div>
 
@@ -832,6 +819,9 @@ function ProductCard({ product, index, favorite, onFavorite, onOpen }: { product
           <div className="min-w-0">
             <p className="text-[8px] tracking-[0.3em] text-gold uppercase md:text-[9px]">{product.brand}</p>
             <h3 className="mt-1 truncate font-display text-[clamp(1.1rem,2vw,1.55rem)] leading-tight">{product.name}</h3>
+            {product.volumeMl && (
+              <p className="mt-0.5 text-[9px] tracking-[0.16em] text-ink-faint uppercase">{product.volumeMl}ml</p>
+            )}
           </div>
           <div className="shrink-0 text-right">
             {product.originalPrice && product.originalPrice > product.price && (
@@ -850,7 +840,14 @@ function ProductCard({ product, index, favorite, onFavorite, onOpen }: { product
               <span key={color.name} title={color.name} className="h-3 w-3 rounded-full border border-white/20" style={{ backgroundColor: color.hex }} />
             ))}
           </div>
-          <button type="button" onClick={onOpen} className="text-[8px] tracking-[0.2em] text-ink-muted uppercase transition-colors hover:text-gold md:text-[9px]">Ver produto →</button>
+          <button
+            type="button"
+            onClick={onAddToBag}
+            disabled={soldOut}
+            className="text-[8px] tracking-[0.2em] text-ink-muted uppercase transition-colors hover:text-gold disabled:cursor-not-allowed disabled:opacity-60 md:text-[9px]"
+          >
+            {ctaLabel}
+          </button>
         </div>
       </div>
     </article>

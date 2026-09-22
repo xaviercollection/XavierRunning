@@ -275,9 +275,17 @@ async function runSuite(flavor, { legacyDefaults }) {
     assert.equal(settings.rows[0].title, "Vista sua presença.");
   });
 
-  await t("anon NÃO lê products.stock (nem via select *)", async () => {
-    await expectCode(as(db, ANON, "select stock from public.products"), "42501", "select stock");
-    await expectCode(as(db, ANON, "select * from public.products"), "42501", "select *");
+  await t("anon lê products.stock e volume_ml (necessário para a sacola no navegador)", async () => {
+    // A sacola roda inteiramente no cliente, sem checkout no servidor: a vitrine precisa do
+    // estoque para não deixar a quantidade passar do limite (migration 20260922090000). Com
+    // essas duas colunas liberadas, todas as colunas de products já eram concedidas ao anon
+    // (created_at/updated_at já estavam no grant original) — select * passa a funcionar.
+    const stock = await as(db, ANON, "select stock from public.products limit 1");
+    assert.equal(stock.rows.length, 1);
+    const volume = await as(db, ANON, "select volume_ml from public.products limit 1");
+    assert.equal(volume.rows.length, 1);
+    const wildcard = await as(db, ANON, "select * from public.products limit 1");
+    assert.equal(wildcard.rows.length, 1);
   });
 
   await t("anon não escreve em nada e não chama funções administrativas", async () => {
@@ -424,6 +432,15 @@ async function runSuite(flavor, { legacyDefaults }) {
     await expectCode(as(db, ADMIN, dup.sql, dup.params), "23505", "slug duplicado");
     const orphan = await validProduct({ category_id: "00000000-0000-4000-8000-00000000ffff" });
     await expectCode(as(db, ADMIN, orphan.sql, orphan.params), "23503", "categoria inexistente");
+  });
+
+  await t("volume_ml: opcional, aceita inteiro positivo e rejeita valor inválido (23514)", async () => {
+    const ok = await validProduct({ volume_ml: 100 });
+    await as(db, ADMIN, ok.sql, ok.params);
+    const zero = await validProduct({ volume_ml: 0 });
+    await expectCode(as(db, ADMIN, zero.sql, zero.params), "23514", "volume_ml = 0");
+    const negative = await validProduct({ volume_ml: -1 });
+    await expectCode(as(db, ADMIN, negative.sql, negative.params), "23514", "volume_ml negativo");
   });
 
   await t("categoria com produtos não pode ser removida (on delete restrict)", async () => {

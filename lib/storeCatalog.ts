@@ -20,6 +20,8 @@ export type StoreBadge = "Novo" | "Esgotado" | "Últimas peças";
 
 export interface StoreProduct {
   id: string;
+  /** Identificador legível (ex.: "zara-camisa-signature"). Só vem preenchido em leituras do banco. */
+  slug?: string;
   brand: string;
   name: string;
   category: StoreCategory;
@@ -33,6 +35,13 @@ export interface StoreProduct {
   badge?: StoreBadge;
   featured?: number;
   description: string;
+  /** Volume em ml (ex.: perfumes), definido pelo admin no cadastro. O cliente não escolhe. */
+  volumeMl?: number;
+  /**
+   * Estoque cadastrado. Opcional aqui só porque o catálogo semente (não usado em produção)
+   * não o define; toda leitura vinda do Supabase sempre preenche este campo.
+   */
+  stock?: number;
 }
 
 const IMAGES = {

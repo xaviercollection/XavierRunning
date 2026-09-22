@@ -91,6 +91,7 @@ export interface ValidProduct {
   status: ProductStatus;
   stock: number;
   isFeatured: boolean;
+  volumeMl: number | null;
 }
 
 export function parseProductInput(raw: unknown, storagePrefix: string): Parsed<ValidProduct> {
@@ -177,6 +178,15 @@ export function parseProductInput(raw: unknown, storagePrefix: string): Parsed<V
     return fail("Informe um estoque válido (0 ou mais).");
   }
 
+  let volumeMl: number | null = null;
+  if (raw.volumeMl !== undefined && raw.volumeMl !== null && raw.volumeMl !== "") {
+    const volume = readNumber(raw.volumeMl);
+    if (volume === null || volume <= 0 || volume > 100_000) {
+      return fail("Informe um volume em ml válido (número inteiro positivo).");
+    }
+    volumeMl = Math.round(volume);
+  }
+
   return ok({
     id,
     brand: brand.value,
@@ -194,6 +204,7 @@ export function parseProductInput(raw: unknown, storagePrefix: string): Parsed<V
     status,
     stock: Math.floor(stockValue),
     isFeatured: raw.isFeatured === true,
+    volumeMl,
   });
 }
 
@@ -214,6 +225,7 @@ export function toProductRow(product: ValidProduct) {
     badge: product.badge ? BADGE_TO_DB[product.badge] : null,
     status: product.status,
     stock: product.stock,
+    volume_ml: product.volumeMl,
   };
 }
 

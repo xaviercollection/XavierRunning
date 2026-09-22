@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Archivo, Bodoni_Moda } from "next/font/google";
+import { CartProvider } from "@/components/cart/CartProvider";
 import { SITE_URL } from "@/lib/site";
 import "./globals.css";
 
@@ -44,7 +45,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="pt-BR" className={`${bodoni.variable} ${archivo.variable}`}>
-      <body className="bg-void text-ink antialiased">{children}</body>
+      <body className="bg-void text-ink antialiased">
+        <CartProvider>{children}</CartProvider>
+      </body>
     </html>
   );
 }

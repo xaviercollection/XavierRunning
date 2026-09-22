@@ -30,8 +30,8 @@ export interface ProductRow {
   status: string;
   is_featured: boolean;
   featured_rank: number | null;
-  /** Só existe nas leituras do painel (o papel anon não tem grant nessa coluna). */
-  stock?: number | null;
+  stock: number | null;
+  volume_ml: number | null;
 }
 
 export interface CategoryRow {
@@ -102,6 +102,7 @@ function baseProduct(row: ProductRow, category: string, storagePrefix: string): 
   const originalPrice = row.original_price == null ? undefined : Number(row.original_price);
   return {
     id: row.id,
+    slug: row.slug,
     brand: row.brand,
     name: row.name,
     category,
@@ -115,6 +116,8 @@ function baseProduct(row: ProductRow, category: string, storagePrefix: string): 
     badge: row.badge ? BADGE_FROM_DB[row.badge] : undefined,
     featured: row.featured_rank ?? undefined,
     description: row.description,
+    volumeMl: row.volume_ml == null ? undefined : Number(row.volume_ml),
+    stock: row.stock ?? 0,
   };
 }
 

@@ -5,6 +5,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { assertPublishableKey } from "../lib/supabase/key-guard.ts";
 import {
+  cartCount,
+  cartItemKey,
+  cartTotalCents as cartTotalCentsFromItems,
+  clampQuantity,
+  defaultVariant,
+  isProductSoldOut,
+  productRequiresVariant,
+} from "../lib/store/cart.ts";
+import {
   BADGE_FROM_DB,
   FALLBACK_IMAGE,
   safeImageSrc,
@@ -34,21 +43,36 @@ const STORAGE = "https://abc123.supabase.co/storage/v1/object/public/product-ima
 const CATEGORY_ID = "11111111-1111-4111-8111-111111111111";
 
 const LINES = [
-  { name: "Camisa Signature", brand: "Zara", category: "Camisas", size: "M", quantity: 2, unitPrice: 239.9 },
-  { name: "Asad", brand: "Lattafa", category: "Perfumes", size: "100 ml", quantity: 1, unitPrice: 249.9 },
+  { name: "Camisa Signature", brand: "Zara", size: "M", color: "Preto", quantity: 2, unitPrice: 239.9 },
+  { name: "Asad", brand: "Lattafa", volumeMl: 100, quantity: 1, unitPrice: 249.9 },
 ];
 
 // ---------------------------------------------------------------- WhatsApp
-test("mensagem do pedido traz produtos, tamanho/volume, quantidades, subtotais e total estimado", () => {
+test("mensagem do pedido traz produtos, tamanho/cor/volume, quantidades, subtotais e total estimado", () => {
   const message = buildWhatsAppMessage(LINES);
   assert.match(message, /1\. Camisa Signature — Zara/);
   assert.match(message, /Tamanho: M/);
+  assert.match(message, /Cor: Preto/);
   assert.match(message, /2 × R\$ 239,90 = R\$ 479,80/);
   assert.match(message, /2\. Asad — Lattafa/);
-  assert.match(message, /Volume: 100 ml/);
+  assert.match(message, /Volume: 100ml/);
   assert.match(message, /1 × R\$ 249,90 = R\$ 249,90/);
   assert.match(message, /Total estimado: R\$ 729,70/);
   assert.ok(!message.includes(" "), "NBSP deve ser normalizado");
+});
+
+test("mensagem não escreve linha de atributo que o item não tem (sem volume/tamanho/cor vazios)", () => {
+  const simple = buildWhatsAppMessage([{ name: "Produto simples", brand: "Xavier", quantity: 1, unitPrice: 100 }]);
+  assert.ok(!simple.includes("Volume:"));
+  assert.ok(!simple.includes("Tamanho:"));
+  assert.ok(!simple.includes("Cor:"));
+
+  const compact = buildWhatsAppMessage(
+    [{ name: "Produto simples", brand: "Xavier", quantity: 1, unitPrice: 100 }],
+    { compact: true },
+  );
+  assert.ok(!compact.includes("undefined"));
+  assert.match(compact, /1\) Produto simples \(Xavier\) x1/);
 });
 
 test("total é calculado em centavos (sem erro de ponto flutuante)", () => {
@@ -119,6 +143,28 @@ test("produto válido é aceito e vira payload de banco com badge normalizado", 
   assert.equal(row.category_id, CATEGORY_ID);
   assert.equal(row.price, 239.9);
   assert.deepEqual(row.sizes, ["P", "M"]);
+  assert.equal(row.volume_ml, null, "volume ausente deve virar null");
+});
+
+test("volume (ml): opcional, aceita inteiro positivo e rejeita valor inválido", () => {
+  const withVolume = parseProductInput(validInput({ volumeMl: 100 }), STORAGE);
+  assert.equal(withVolume.ok, true);
+  assert.equal(withVolume.value.volumeMl, 100);
+  assert.equal(toProductRow(withVolume.value).volume_ml, 100);
+
+  const rounded = parseProductInput(validInput({ volumeMl: 99.6 }), STORAGE);
+  assert.equal(rounded.value.volumeMl, 100);
+
+  const zero = parseProductInput(validInput({ volumeMl: 0 }), STORAGE);
+  assert.equal(zero.ok, false);
+  assert.match(zero.error, /volume/i);
+
+  const negative = parseProductInput(validInput({ volumeMl: -5 }), STORAGE);
+  assert.equal(negative.ok, false);
+
+  const empty = parseProductInput(validInput({ volumeMl: "" }), STORAGE);
+  assert.equal(empty.ok, true);
+  assert.equal(empty.value.volumeMl, null);
 });
 
 test("BADGE_TO_DB e BADGE_FROM_DB são inversos", () => {
@@ -243,6 +289,7 @@ const row = (overrides = {}) => ({
   is_featured: true,
   featured_rank: 3,
   stock: 12,
+  volume_ml: null,
   ...overrides,
 });
 
@@ -254,7 +301,11 @@ test("mapper público converte numeric em number e badge do banco para o rótulo
   assert.equal(product.imageFit, "contain");
   assert.equal(product.imagePosition, "30% 82%");
   assert.equal(product.featured, 3);
-  assert.equal("stock" in product, false, "estoque não deve vazar para a loja");
+  // A sacola roda no navegador (sem checkout no servidor): a vitrine PRECISA saber o estoque
+  // para não deixar a quantidade passar do limite disponível (ver migration 20260922090000).
+  assert.equal(product.stock, 12, "estoque deve chegar à loja para a sacola respeitar o limite");
+  assert.equal(product.slug, "zara-camisa-signature");
+  assert.equal(product.volumeMl, undefined, "sem volume cadastrado");
 });
 
 test("status out-of-stock aparece como selo Esgotado na loja, mas o painel mantém o valor real", () => {
@@ -265,6 +316,14 @@ test("status out-of-stock aparece como selo Esgotado na loja, mas o painel mant�
   assert.equal(admin.status, "out-of-stock");
   assert.equal(admin.stock, 12);
   assert.equal(admin.isFeatured, true);
+});
+
+test("mapper converte volume_ml em número e produto sem estoque conta como esgotado", () => {
+  const perfume = toStoreProduct(row({ volume_ml: 100, sizes: ["100 ml"] }), "Perfumes", STORAGE);
+  assert.equal(perfume.volumeMl, 100);
+
+  const outOfStock = toStoreProduct(row({ stock: 0, status: "active" }), "Camisas", STORAGE);
+  assert.equal(outOfStock.stock, 0);
 });
 
 test("linha ruim não derruba a loja: imagem inválida vira fallback, tamanhos/cores vazios têm padrão", () => {
@@ -281,6 +340,58 @@ test("toStoreSettings usa padrões quando a linha não existe", () => {
   const settings = toStoreSettings(null);
   assert.equal(settings.title, "Vista sua presença.");
   assert.equal(settings.announcementEnabled, false);
+});
+
+// ---------------------------------------------------------------- Sacola (carrinho)
+test("productRequiresVariant: só exige escolha com mais de um tamanho real ou mais de uma cor", () => {
+  assert.equal(productRequiresVariant({ sizes: ["Único"], colors: [] }), false);
+  assert.equal(productRequiresVariant({ sizes: ["100 ml"], colors: [{ name: "Preto", hex: "#111" }] }), false);
+  assert.equal(productRequiresVariant({ sizes: ["P", "M"], colors: [] }), true);
+  assert.equal(
+    productRequiresVariant({ sizes: ["Único"], colors: [{ name: "Preto", hex: "#111" }, { name: "Branco", hex: "#fff" }] }),
+    true,
+  );
+});
+
+test("defaultVariant: preenche tamanho/cor implícitos quando não há escolha a fazer", () => {
+  assert.deepEqual(defaultVariant({ sizes: ["Único"], colors: [] }), { size: undefined, color: undefined });
+  assert.deepEqual(defaultVariant({ sizes: ["100 ml"], colors: [{ name: "Preto", hex: "#111" }] }), {
+    size: "100 ml",
+    color: "Preto",
+  });
+  // Mais de um tamanho/cor: não escolhe por conta própria (o cliente decide).
+  assert.deepEqual(defaultVariant({ sizes: ["P", "M"], colors: [] }).size, undefined);
+});
+
+test("isProductSoldOut: pelo selo Esgotado OU por estoque zerado", () => {
+  assert.equal(isProductSoldOut({ badge: "Esgotado", stock: 10 }), true);
+  assert.equal(isProductSoldOut({ badge: undefined, stock: 0 }), true);
+  assert.equal(isProductSoldOut({ badge: undefined, stock: 3 }), false);
+  assert.equal(isProductSoldOut({ badge: undefined, stock: undefined }), false);
+});
+
+test("clampQuantity nunca deixa a sacola passar do estoque disponível", () => {
+  assert.equal(clampQuantity(4, 3), 3);
+  assert.equal(clampQuantity(1, 3), 1);
+  assert.equal(clampQuantity(0, 3), 1, "quantidade mínima é 1 enquanto houver estoque");
+  assert.equal(clampQuantity(5, 0), 0, "sem estoque, o item não pode ficar na sacola");
+});
+
+test("cartItemKey: variações diferentes do mesmo produto são itens diferentes", () => {
+  const camisetaM = cartItemKey("prod-1", { size: "M", color: "Preto" });
+  const camisetaG = cartItemKey("prod-1", { size: "G", color: "Branco" });
+  assert.notEqual(camisetaM, camisetaG);
+  assert.equal(cartItemKey("prod-1", { size: "M", color: "Preto" }), camisetaM, "mesma variação = mesma chave");
+});
+
+test("cartCount e cartTotalCents somam quantidade e preço (em centavos) de todos os itens", () => {
+  const items = [
+    { quantity: 2, price: 160 },
+    { quantity: 1, price: 90 },
+  ];
+  assert.equal(cartCount(items), 3);
+  assert.equal(cartTotalCentsFromItems(items), 41000);
+  assert.equal(cartTotalCentsFromItems([{ quantity: 3, price: 0.1 }]), 30, "sem erro de ponto flutuante");
 });
 
 // ---------------------------------------------------------------- Guarda de chave

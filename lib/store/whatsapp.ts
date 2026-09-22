@@ -7,11 +7,32 @@ export const DEFAULT_WHATSAPP_E164 = "558388933979";
 export interface WhatsAppLine {
   name: string;
   brand: string;
-  category: string;
-  /** Tamanho (roupas) ou volume (perfumes), como cadastrado. */
-  size: string;
   quantity: number;
   unitPrice: number;
+  /** ml, quando o produto tiver volume cadastrado (ex.: perfumes). */
+  volumeMl?: number;
+  /** Tamanho escolhido pelo cliente, quando o produto tiver mais de um. */
+  size?: string;
+  /** Cor escolhida pelo cliente, quando o produto tiver mais de uma. */
+  color?: string;
+}
+
+/** Só emite a linha do atributo quando ele existir — nunca "Tamanho:"/"Cor:"/"Volume:" vazios. */
+function attributeLines(line: WhatsAppLine, indent: string): string[] {
+  const lines: string[] = [];
+  if (line.volumeMl != null) lines.push(`${indent}Volume: ${line.volumeMl}ml`);
+  if (line.size) lines.push(`${indent}Tamanho: ${line.size}`);
+  if (line.color) lines.push(`${indent}Cor: ${line.color}`);
+  return lines;
+}
+
+function compactAttributes(line: WhatsAppLine): string {
+  const attrs = [
+    line.volumeMl != null ? `${line.volumeMl}ml` : null,
+    line.size ?? null,
+    line.color ?? null,
+  ].filter((value): value is string => Boolean(value));
+  return attrs.length > 0 ? ` (${attrs.join(" · ")})` : "";
 }
 
 /** Normaliza o texto digitado no painel para dígitos E.164 (adiciona 55 a números nacionais). */
@@ -34,11 +55,6 @@ function formatCents(cents: number): string {
 
 const toCents = (price: number) => Math.round(price * 100);
 
-/** Perfume => "Volume"; demais categorias => "Tamanho". */
-function sizeLabel(category: string): string {
-  return category.toLocaleLowerCase("pt-BR") === "perfumes" ? "Volume" : "Tamanho";
-}
-
 export function cartTotalCents(lines: WhatsAppLine[]): number {
   return lines.reduce((sum, line) => sum + toCents(line.unitPrice) * line.quantity, 0);
 }
@@ -49,7 +65,7 @@ export function buildWhatsAppMessage(lines: WhatsAppLine[], options: { compact?:
   if (options.compact) {
     const items = lines.map((line, index) => {
       const subtotal = formatCents(toCents(line.unitPrice) * line.quantity);
-      return `${index + 1}) ${line.name} (${line.brand}) ${line.size} x${line.quantity} = ${subtotal}`;
+      return `${index + 1}) ${line.name} (${line.brand})${compactAttributes(line)} x${line.quantity} = ${subtotal}`;
     });
     return [
       "Olá, Xavier Collection! Quero finalizar este pedido:",
@@ -63,7 +79,7 @@ export function buildWhatsAppMessage(lines: WhatsAppLine[], options: { compact?:
     const subtotal = formatCents(toCents(line.unitPrice) * line.quantity);
     return [
       `${index + 1}. ${line.name} — ${line.brand}`,
-      `   ${sizeLabel(line.category)}: ${line.size}`,
+      ...attributeLines(line, "   "),
       `   ${line.quantity} × ${formatCents(toCents(line.unitPrice))} = ${subtotal}`,
     ].join("\n");
   });

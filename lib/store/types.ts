@@ -44,6 +44,8 @@ export type ProductInput = {
   status: ProductStatus;
   stock: number;
   isFeatured: boolean;
+  /** ml (ex.: perfumes). Definido pelo admin; o cliente nunca escolhe. Ausente/null = não se aplica. */
+  volumeMl?: number | null;
 };
 
 export type FeaturedState = { id: string; isFeatured: boolean; featured: number | null };

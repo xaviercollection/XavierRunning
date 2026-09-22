@@ -7,7 +7,10 @@ import { signOutAction } from "@/app/admin/login/actions";
 import { FinanceDashboard } from "@/components/admin/FinanceDashboard";
 import { formatStorePrice, type StoreBadge } from "@/lib/storeCatalog";
 import {
+  createCategoryAction,
+  deleteCategoryAction,
   deleteProductAction,
+  renameCategoryAction,
   reorderCategoriesAction,
   reorderFeaturedAction,
   saveProductAction,
@@ -98,6 +101,7 @@ export function AdminDashboard({
   const [draft, setDraft] = useState<AdminProduct | null>(null);
   const [isNewProduct, setIsNewProduct] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<AdminProduct | null>(null);
+  const [pendingDeleteCategory, setPendingDeleteCategory] = useState<AdminCategory | null>(null);
   const [toast, setToast] = useState("");
   const [saving, setSaving] = useState(false);
   const [storeSettings, setStoreSettings] = useState<StoreSettings>(initialSettings);
@@ -170,6 +174,7 @@ export function AdminDashboard({
       status: draft.status,
       stock: draft.stock,
       isFeatured: draft.isFeatured,
+      volumeMl: draft.volumeMl ?? null,
     }));
     setSaving(false);
 
@@ -288,6 +293,50 @@ export function AdminDashboard({
       applyVisibility(category.visible);
       showToast(result.error);
     }
+  }
+
+  async function createCategory(name: string) {
+    const result = await runAction(() => createCategoryAction(name));
+    if (!result.ok) {
+      showToast(result.error);
+      return;
+    }
+    setCategories((current) => [...current, result.data]);
+    showToast("Categoria criada.");
+  }
+
+  async function renameCategory(id: string, name: string) {
+    const trimmed = name.trim();
+    const current = categories.find((item) => item.id === id);
+    if (!current || !trimmed || current.name === trimmed) return;
+    const previousName = current.name;
+
+    setCategories((list) => list.map((item) => (item.id === id ? { ...item, name: trimmed } : item)));
+    const result = await runAction(() => renameCategoryAction(id, trimmed));
+    if (!result.ok) {
+      setCategories((list) => list.map((item) => (item.id === id ? { ...item, name: previousName } : item)));
+      showToast(result.error);
+      return;
+    }
+    // A categoria do produto é armazenada pelo nome (join feito na leitura): mantém em sincronia.
+    setProducts((list) =>
+      list.map((product) => (product.category === previousName ? { ...product, category: result.data.name } : product)),
+    );
+    showToast("Categoria renomeada.");
+  }
+
+  async function confirmDeleteCategory() {
+    if (!pendingDeleteCategory) return;
+    const target = pendingDeleteCategory;
+    const result = await runAction(() => deleteCategoryAction(target.id));
+    if (!result.ok) {
+      showToast(result.error);
+      setPendingDeleteCategory(null);
+      return;
+    }
+    setCategories((current) => current.filter((category) => category.id !== target.id));
+    setPendingDeleteCategory(null);
+    showToast("Categoria removida.");
   }
 
   async function saveStoreSettings() {
@@ -443,6 +492,9 @@ export function AdminDashboard({
               products={products}
               onToggleVisibility={toggleCategoryVisibility}
               onMove={moveCategory}
+              onCreate={createCategory}
+              onRename={renameCategory}
+              onRequestDelete={setPendingDeleteCategory}
             />
           )}
 
@@ -478,6 +530,20 @@ export function AdminDashboard({
             <div className="mt-8 flex justify-end gap-3">
               <button type="button" onClick={() => setPendingDelete(null)} className="admin-button-secondary">Cancelar</button>
               <button type="button" onClick={confirmDelete} className="admin-button-danger">Remover</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pendingDeleteCategory && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 p-5 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Confirmar exclusão de categoria">
+          <div className="w-full max-w-md border border-white/10 bg-[#0a0a0a] p-7">
+            <p className="eyebrow">Remover categoria</p>
+            <h2 className="mt-4 font-display text-3xl">Remover {pendingDeleteCategory.name}?</h2>
+            <p className="mt-4 text-sm leading-relaxed text-ink-muted">Esta ação não pode ser desfeita. Categorias com produtos vinculados não podem ser removidas.</p>
+            <div className="mt-8 flex justify-end gap-3">
+              <button type="button" onClick={() => setPendingDeleteCategory(null)} className="admin-button-secondary">Cancelar</button>
+              <button type="button" onClick={confirmDeleteCategory} className="admin-button-danger">Remover</button>
             </div>
           </div>
         </div>
@@ -619,20 +685,99 @@ function FeaturedSection({ featured, available, onToggle, onMove }: { featured: 
   );
 }
 
-function CategoriesSection({ categories, products, onToggleVisibility, onMove }: { categories: AdminCategory[]; products: AdminProduct[]; onToggleVisibility: (id: string) => void; onMove: (index: number, direction: -1 | 1) => void }) {
+function CategoriesSection({
+  categories,
+  products,
+  onToggleVisibility,
+  onMove,
+  onCreate,
+  onRename,
+  onRequestDelete,
+}: {
+  categories: AdminCategory[];
+  products: AdminProduct[];
+  onToggleVisibility: (id: string) => void;
+  onMove: (index: number, direction: -1 | 1) => void;
+  onCreate: (name: string) => void;
+  onRename: (id: string, name: string) => void;
+  onRequestDelete: (category: AdminCategory) => void;
+}) {
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState("");
+
+  function submitNewCategory(event: React.FormEvent) {
+    event.preventDefault();
+    const trimmed = newCategoryName.trim();
+    if (!trimmed) return;
+    onCreate(trimmed);
+    setNewCategoryName("");
+  }
+
+  function startEditing(category: AdminCategory) {
+    setEditingId(category.id);
+    setEditingName(category.name);
+  }
+
+  function submitEdit(event: React.FormEvent) {
+    event.preventDefault();
+    if (editingId && editingName.trim()) onRename(editingId, editingName.trim());
+    setEditingId(null);
+  }
+
   return (
     <section className="admin-panel">
       <div className="admin-panel-header"><div><p className="admin-kicker">Menu da loja</p><h2 className="admin-title">Categorias e ordem de exibição</h2><p className="mt-2 text-xs text-ink-muted">Controle quais categorias aparecem para o cliente.</p></div></div>
+
+      <form onSubmit={submitNewCategory} className="flex flex-col gap-3 border-b border-white/[0.07] p-5 sm:flex-row sm:items-center md:p-6">
+        <label className="flex-1"><span className="sr-only">Nome da nova categoria</span><input value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} placeholder="Nome da nova categoria" maxLength={60} className="admin-input w-full" /></label>
+        <button type="submit" disabled={!newCategoryName.trim()} className="admin-button-primary shrink-0 disabled:cursor-not-allowed disabled:opacity-40"><AdminIcon kind="plus" className="h-4 w-4" /> Nova categoria</button>
+      </form>
+
       <div className="grid gap-3 p-5 md:grid-cols-2 md:p-6 xl:grid-cols-3">
         {categories.map((category, index) => {
           const count = products.filter((product) => product.category === category.name).length;
+          const isEditing = editingId === category.id;
           return (
             <div key={category.id} className={`border p-5 transition-colors ${category.visible ? "border-white/[0.08] bg-white/[0.018]" : "border-white/[0.04] opacity-50"}`}>
-              <div className="flex items-start justify-between gap-4"><div><p className="font-display text-xl">{category.name}</p><p className="mt-2 text-[9px] tracking-[0.2em] text-ink-faint uppercase">{count} produtos</p></div><button type="button" onClick={() => onToggleVisibility(category.id)} className={`relative h-6 w-11 rounded-full transition-colors ${category.visible ? "bg-gold" : "bg-white/10"}`} aria-label={`${category.visible ? "Ocultar" : "Exibir"} ${category.name}`}><span className={`absolute top-1 h-4 w-4 rounded-full bg-black transition-transform ${category.visible ? "translate-x-6" : "translate-x-1"}`} /></button></div>
-              <div className="mt-6 flex items-center justify-between border-t border-white/[0.06] pt-4"><span className="text-[9px] text-ink-faint">POSIÇÃO {String(index + 1).padStart(2, "0")}</span><div className="flex gap-1"><button type="button" onClick={() => onMove(index, -1)} disabled={index === 0} className="admin-icon-button disabled:opacity-20">↑</button><button type="button" onClick={() => onMove(index, 1)} disabled={index === categories.length - 1} className="admin-icon-button disabled:opacity-20">↓</button></div></div>
+              <div className="flex items-start justify-between gap-4">
+                {isEditing ? (
+                  <form onSubmit={submitEdit} className="flex flex-1 items-center gap-2">
+                    <input value={editingName} onChange={(e) => setEditingName(e.target.value)} maxLength={60} autoFocus className="admin-input flex-1 py-1.5 text-sm" aria-label={`Renomear ${category.name}`} />
+                    <button type="submit" className="admin-icon-button text-emerald-300" aria-label="Salvar nome">✓</button>
+                    <button type="button" onClick={() => setEditingId(null)} className="admin-icon-button" aria-label="Cancelar edição"><AdminIcon kind="close" className="h-4 w-4" /></button>
+                  </form>
+                ) : (
+                  <div className="min-w-0"><p className="truncate font-display text-xl">{category.name}</p><p className="mt-2 text-[9px] tracking-[0.2em] text-ink-faint uppercase">{count} produtos</p></div>
+                )}
+                {!isEditing && (
+                  <button type="button" onClick={() => onToggleVisibility(category.id)} className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${category.visible ? "bg-gold" : "bg-white/10"}`} aria-label={`${category.visible ? "Ocultar" : "Exibir"} ${category.name}`}><span className={`absolute top-1 h-4 w-4 rounded-full bg-black transition-transform ${category.visible ? "translate-x-6" : "translate-x-1"}`} /></button>
+                )}
+              </div>
+              <div className="mt-6 flex items-center justify-between border-t border-white/[0.06] pt-4">
+                <span className="text-[9px] text-ink-faint">POSIÇÃO {String(index + 1).padStart(2, "0")}</span>
+                <div className="flex gap-1">
+                  <button type="button" onClick={() => onMove(index, -1)} disabled={index === 0} className="admin-icon-button disabled:opacity-20" aria-label={`Mover ${category.name} para cima`}>↑</button>
+                  <button type="button" onClick={() => onMove(index, 1)} disabled={index === categories.length - 1} className="admin-icon-button disabled:opacity-20" aria-label={`Mover ${category.name} para baixo`}>↓</button>
+                  {!isEditing && <button type="button" onClick={() => startEditing(category)} className="admin-icon-button" aria-label={`Renomear ${category.name}`}><AdminIcon kind="edit" className="h-4 w-4" /></button>}
+                  <button
+                    type="button"
+                    onClick={() => onRequestDelete(category)}
+                    disabled={count > 0}
+                    title={count > 0 ? "Remova ou mova os produtos desta categoria antes de excluí-la." : undefined}
+                    className="admin-icon-button disabled:cursor-not-allowed disabled:opacity-20 hover:border-red-400/30 hover:text-red-300"
+                    aria-label={`Remover ${category.name}`}
+                  >
+                    <AdminIcon kind="trash" className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
             </div>
           );
         })}
+        {categories.length === 0 && (
+          <p className="px-1 py-10 text-center text-sm text-ink-muted md:col-span-2 xl:col-span-3">Nenhuma categoria cadastrada ainda.</p>
+        )}
       </div>
     </section>
   );
@@ -728,7 +873,8 @@ function ProductEditor({ draft, setDraft, categories, saving, isNew, onClose, on
                 {promotionInvalid && <p className="-mt-2 text-[10px] text-red-300 md:col-span-2">O preço anterior precisa ser maior que o preço de venda.</p>}
               </>
             )}
-            <AdminField label="Tamanhos / volumes" className="md:col-span-2"><input value={draft.sizes.join(", ")} onChange={(e) => update("sizes", e.target.value.split(",").map((item) => item.trim()).filter(Boolean))} className="admin-input" placeholder="P, M, G ou 100 ml" /></AdminField>
+            <AdminField label="Tamanhos" className="md:col-span-2"><input value={draft.sizes.join(", ")} onChange={(e) => update("sizes", e.target.value.split(",").map((item) => item.trim()).filter(Boolean))} className="admin-input" placeholder="P, M, G, GG" /></AdminField>
+            <AdminField label="Volume (ml) — opcional, use para perfumes"><input type="number" min="1" step="1" value={draft.volumeMl ?? ""} onChange={(e) => update("volumeMl", e.target.value === "" ? undefined : Math.max(1, Math.round(Number(e.target.value))))} className="admin-input" placeholder="Ex.: 100" /></AdminField>
             <AdminField label="Caminho da imagem" className="md:col-span-2"><input value={draft.image} onChange={(e) => update("image", e.target.value)} className="admin-input" /></AdminField>
             <AdminField label="Descrição" className="md:col-span-2"><textarea value={draft.description} onChange={(e) => update("description", e.target.value)} className="admin-textarea" rows={4} /></AdminField>
             <label className="flex cursor-pointer items-center justify-between border border-white/[0.07] p-4 md:col-span-2"><div><p className="text-xs text-ink">Produto em destaque</p><p className="mt-1 text-[10px] text-ink-faint">Exibir com prioridade na vitrine</p></div><input type="checkbox" checked={draft.isFeatured} onChange={(e) => update("isFeatured", e.target.checked)} className="h-4 w-4 accent-[#c8a45d]" /></label>
