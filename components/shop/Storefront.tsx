@@ -658,6 +658,11 @@ function CategoryCarousel({
 
   function handlePointerDown(event: React.PointerEvent<HTMLDivElement>) {
     if (event.pointerType !== "mouse" || event.button !== 0) return;
+    // Clique em botão/link (ex.: "Adicionar à sacola", favoritar) não pode virar arraste: sem
+    // este corte, o setPointerCapture abaixo redireciona o click sintético inteiro para o rail
+    // (não para o botão), e o clique nunca chega ao onClick — a sacola parecia "não funcionar"
+    // sempre que o produto estava dentro de um carrossel (aba "Todos", a visão padrão da loja).
+    if ((event.target as HTMLElement).closest("button, a")) return;
     dragRef.current = {
       active: true,
       moved: false,
