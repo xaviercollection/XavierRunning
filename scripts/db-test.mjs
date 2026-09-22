@@ -12,6 +12,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { PGlite } from "@electric-sql/pglite";
+import { TRANSACTION_COLUMNS } from "../lib/finance/columns.ts";
 import {
   ADMIN_PRODUCT_COLUMNS,
   CATEGORY_COLUMNS,
@@ -201,6 +202,31 @@ async function runSuite(flavor, { legacyDefaults }) {
     assert.equal(await one("select count(*) n from public.store_settings"), 1);
   });
 
+  await t("categories.product_type: seed inicial classificada, default 'generic' e CHECK rejeita valor fora da lista", async () => {
+    const typeOf = async (slug) =>
+      (await db.query("select product_type from public.categories where slug = $1", [slug])).rows[0].product_type;
+    assert.equal(await typeOf("perfumes"), "perfume");
+    assert.equal(await typeOf("camisas"), "clothing");
+    assert.equal(await typeOf("casacos"), "clothing");
+    assert.equal(await typeOf("calcas"), "clothing");
+    assert.equal(await typeOf("shorts"), "clothing");
+    assert.equal(await typeOf("roupas-de-academia"), "clothing");
+    assert.equal(await typeOf("chapeus-e-bones"), "accessory");
+    assert.equal(await typeOf("oculos"), "glasses");
+    assert.equal(await typeOf("sapatos"), "footwear");
+
+    // Categoria nova sem tipo explícito cai no default 'generic' (não quebra, não força escolha).
+    await db.exec("insert into public.categories (name, slug) values ('Bolsas', 'bolsas')");
+    assert.equal(await typeOf("bolsas"), "generic");
+    await db.exec("delete from public.categories where slug = 'bolsas'");
+
+    await expectCode(
+      db.query("insert into public.categories (name, slug, product_type) values ('X', 'x-teste', 'roupa')"),
+      "23514",
+      "product_type fora da lista controlada",
+    );
+  });
+
   await t("seed é idempotente e não sobrescreve edições do lojista", async () => {
     await db.exec("update public.products set price = 1.11 where slug = 'zara-camisa-signature'");
     const seed = readFileSync(
@@ -219,11 +245,14 @@ async function runSuite(flavor, { legacyDefaults }) {
     const { rows } = await db.query(`
       select relname, relrowsecurity from pg_class
        where relnamespace = 'public'::regnamespace and relkind = 'r'`);
-    assert.deepEqual(rows.map((r) => r.relname).sort(), ["admin_users", "categories", "products", "store_settings"]);
+    assert.deepEqual(
+      rows.map((r) => r.relname).sort(),
+      ["admin_users", "categories", "financial_transactions", "products", "store_settings"],
+    );
     for (const row of rows) assert.equal(row.relrowsecurity, true, `${row.relname} sem RLS`);
   });
 
-  await t("listas de colunas de lib/store/columns.ts existem no schema migrado", async () => {
+  await t("listas de colunas de lib/store/columns.ts e lib/finance/columns.ts existem no schema migrado", async () => {
     const columnsOf = async (table) =>
       new Set((await db.query(
         "select column_name from information_schema.columns where table_schema='public' and table_name=$1",
@@ -235,6 +264,8 @@ async function runSuite(flavor, { legacyDefaults }) {
     for (const col of CATEGORY_COLUMNS) assert.ok(categories.has(col), `categories.${col} não existe`);
     const settings = await columnsOf("store_settings");
     for (const col of STORE_SETTINGS_COLUMNS) assert.ok(settings.has(col), `store_settings.${col} não existe`);
+    const transactions = await columnsOf("financial_transactions");
+    for (const col of TRANSACTION_COLUMNS) assert.ok(transactions.has(col), `financial_transactions.${col} não existe`);
   });
 
   await t("auditoria de grants: anon só lê; authenticated não tem TRUNCATE/REFERENCES/TRIGGER", async () => {
@@ -492,6 +523,72 @@ async function runSuite(flavor, { legacyDefaults }) {
       "insert admin_users",
     );
     await expectCode(as(db, ADMIN, "select public.promote_admin('cliente@example.com')"), "42501", "promote_admin");
+  });
+
+  // ---- financial_transactions ---------------------------------------------
+  // Ao contrário de products/categories, NÃO existe policy pública aqui: nem select. É
+  // informação administrativa (ver 20260922180000_financial_transactions.sql).
+  const validTransaction = (overrides = {}) => {
+    const base = {
+      type: "sale",
+      description: "Venda de teste",
+      amount: 100,
+      status: "paid",
+      transaction_date: "2026-09-22",
+      ...overrides,
+    };
+    const keys = Object.keys(base);
+    return {
+      sql: `insert into public.financial_transactions (${keys.join(", ")}) values (${keys.map((_, i) => `$${i + 1}`).join(", ")}) returning id`,
+      params: keys.map((k) => base[k]),
+    };
+  };
+
+  await t("anon e usuário comum não leem nem escrevem financial_transactions (é dado administrativo, sem policy pública)", async () => {
+    // anon não tem NENHUM grant na tabela: falha por falta de privilégio (42501), antes de a
+    // RLS entrar em jogo.
+    await expectCode(as(db, ANON, "select * from public.financial_transactions"), "42501", "anon select");
+    // usuário comum TEM grant (authenticated), mas a policy usa is_admin(): SELECT sob RLS não
+    // lança erro, só filtra — a linha simplesmente não aparece pra quem não é admin.
+    const seen = await as(db, USER, "select * from public.financial_transactions");
+    assert.equal(seen.rows.length, 0, "usuário comum enxergou alguma movimentação financeira");
+
+    const insert = await validTransaction();
+    await expectCode(as(db, ANON, insert.sql, insert.params), "42501", "anon insert");
+    // INSERT/UPDATE/DELETE que violam a policy SÃO rejeitados com erro (WITH CHECK falhou).
+    await expectCode(as(db, USER, insert.sql, insert.params), "42501", "usuário comum insert");
+  });
+
+  await t("admin registra, edita, dá baixa e remove uma movimentação financeira", async () => {
+    const insert = await validTransaction({ status: "pending", due_date: "2026-09-30" });
+    const created = (await as(db, ADMIN, insert.sql, insert.params)).rows[0].id;
+
+    const updated = await as(
+      db,
+      ADMIN,
+      "update public.financial_transactions set status = 'paid' where id = $1 returning status, updated_at, created_at",
+      [created],
+    );
+    assert.equal(updated.rows[0].status, "paid");
+    assert.ok(updated.rows[0].updated_at >= updated.rows[0].created_at, "trigger updated_at");
+
+    const selected = await as(db, ADMIN, "select count(*) n from public.financial_transactions where id = $1", [created]);
+    assert.equal(Number(selected.rows[0].n), 1);
+
+    const removed = await as(db, ADMIN, "delete from public.financial_transactions where id = $1", [created]);
+    assert.equal(removed.affectedRows, 1);
+  });
+
+  await t("financial_transactions: constraints rejeitam type/status/amount/description inválidos (23514)", async () => {
+    const bad = async (overrides, label) => {
+      const q = validTransaction(overrides);
+      await expectCode(as(db, ADMIN, q.sql, q.params), "23514", label);
+    };
+    await bad({ type: "reembolso" }, "type inválido");
+    await bad({ status: "cancelado" }, "status inválido");
+    await bad({ amount: 0 }, "amount zero");
+    await bad({ amount: -5 }, "amount negativo");
+    await bad({ description: "   " }, "description em branco");
   });
 
   await t("service_role tem acesso total (uso exclusivo de servidor)", async () => {

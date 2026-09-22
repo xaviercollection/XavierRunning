@@ -6,6 +6,7 @@ import test from "node:test";
 import { assertPublishableKey } from "../lib/supabase/key-guard.ts";
 import {
   cartCount,
+  cartItemFromProduct,
   cartItemKey,
   cartTotalCents as cartTotalCentsFromItems,
   clampQuantity,
@@ -17,10 +18,12 @@ import {
   BADGE_FROM_DB,
   FALLBACK_IMAGE,
   safeImageSrc,
+  toAdminCategory,
   toAdminProduct,
   toStoreProduct,
   toStoreSettings,
 } from "../lib/store/mappers.ts";
+import { attributesForType, isProductType, PRODUCT_TYPES } from "../lib/store/productType.ts";
 import {
   BADGE_TO_DB,
   isAllowedImageSrc,
@@ -59,6 +62,17 @@ test("mensagem do pedido traz produtos, tamanho/cor/volume, quantidades, subtota
   assert.match(message, /1 × R\$ 249,90 = R\$ 249,90/);
   assert.match(message, /Total estimado: R\$ 729,70/);
   assert.ok(!message.includes(" "), "NBSP deve ser normalizado");
+});
+
+test("mensagem usa o rótulo correto por tipo: Numeração para calçado, Tamanho por padrão", () => {
+  const shoe = buildWhatsAppMessage([
+    { name: "Tênis Strike", brand: "Strike", size: "40", sizeLabel: "Numeração", color: "Branco", quantity: 1, unitPrice: 250 },
+  ]);
+  assert.match(shoe, /Numeração: 40/);
+  assert.ok(!shoe.includes("Tamanho:"), "calçado não deve usar o rótulo Tamanho");
+
+  const shirt = buildWhatsAppMessage([{ name: "Camisa", brand: "Zara", size: "M", quantity: 1, unitPrice: 100 }]);
+  assert.match(shirt, /Tamanho: M/, "sem sizeLabel explícito, cai no padrão Tamanho");
 });
 
 test("mensagem não escreve linha de atributo que o item não tem (sem volume/tamanho/cor vazios)", () => {
@@ -293,8 +307,11 @@ const row = (overrides = {}) => ({
   ...overrides,
 });
 
+const CLOTHING_CATEGORY = { name: "Camisas", productType: "clothing" };
+const PERFUME_CATEGORY = { name: "Perfumes", productType: "perfume" };
+
 test("mapper público converte numeric em number e badge do banco para o rótulo da UI", () => {
-  const product = toStoreProduct(row({ original_price: 300 }), "Camisas", STORAGE);
+  const product = toStoreProduct(row({ original_price: 300 }), CLOTHING_CATEGORY, STORAGE);
   assert.equal(product.price, 239.9);
   assert.equal(product.originalPrice, 300);
   assert.equal(product.badge, "Últimas peças");
@@ -306,28 +323,49 @@ test("mapper público converte numeric em number e badge do banco para o rótulo
   assert.equal(product.stock, 12, "estoque deve chegar à loja para a sacola respeitar o limite");
   assert.equal(product.slug, "zara-camisa-signature");
   assert.equal(product.volumeMl, undefined, "sem volume cadastrado");
+  assert.equal(product.category, "Camisas");
+  assert.equal(product.productType, "clothing");
 });
 
 test("status out-of-stock aparece como selo Esgotado na loja, mas o painel mantém o valor real", () => {
   const sold = row({ status: "out-of-stock", badge: null });
-  assert.equal(toStoreProduct(sold, "Camisas", STORAGE).badge, "Esgotado");
-  const admin = toAdminProduct(sold, "Camisas", STORAGE);
+  assert.equal(toStoreProduct(sold, CLOTHING_CATEGORY, STORAGE).badge, "Esgotado");
+  const admin = toAdminProduct(sold, CLOTHING_CATEGORY, STORAGE);
   assert.equal(admin.badge, undefined);
   assert.equal(admin.status, "out-of-stock");
   assert.equal(admin.stock, 12);
   assert.equal(admin.isFeatured, true);
 });
 
-test("mapper converte volume_ml em número e produto sem estoque conta como esgotado", () => {
-  const perfume = toStoreProduct(row({ volume_ml: 100, sizes: ["100 ml"] }), "Perfumes", STORAGE);
+test("mapper converte volume_ml em número, carrega o tipo da categoria e produto sem estoque conta como esgotado", () => {
+  const perfume = toStoreProduct(row({ volume_ml: 100, sizes: ["100 ml"] }), PERFUME_CATEGORY, STORAGE);
   assert.equal(perfume.volumeMl, 100);
+  assert.equal(perfume.productType, "perfume");
+  // Dado legado (sizes ainda preenchido) chega intacto no mapper — quem decide se é relevante
+  // é lib/store/cart.ts (productRequiresVariant/defaultVariant), não o mapper.
+  assert.deepEqual(perfume.sizes, ["100 ml"]);
 
-  const outOfStock = toStoreProduct(row({ stock: 0, status: "active" }), "Camisas", STORAGE);
+  const outOfStock = toStoreProduct(row({ stock: 0, status: "active" }), CLOTHING_CATEGORY, STORAGE);
   assert.equal(outOfStock.stock, 0);
 });
 
+test("toAdminCategory: product_type desconhecido/ausente do banco cai em generic (nunca quebra)", () => {
+  const categoryRow = (product_type) => ({
+    id: CATEGORY_ID,
+    name: "Bolsas",
+    slug: "bolsas",
+    sort_order: 0,
+    is_visible: true,
+    product_type,
+  });
+  assert.equal(toAdminCategory(categoryRow("accessory")).productType, "accessory");
+  assert.equal(toAdminCategory(categoryRow("valor-invalido")).productType, "generic");
+  assert.equal(toAdminCategory(categoryRow(null)).productType, "generic");
+  assert.equal(toAdminCategory(categoryRow(undefined)).productType, "generic");
+});
+
 test("linha ruim não derruba a loja: imagem inválida vira fallback, tamanhos/cores vazios têm padrão", () => {
-  const bad = toStoreProduct(row({ image_url: "https://evil.example/x.png", sizes: [], colors: "lixo" }), "Camisas", STORAGE);
+  const bad = toStoreProduct(row({ image_url: "https://evil.example/x.png", sizes: [], colors: "lixo" }), CLOTHING_CATEGORY, STORAGE);
   assert.equal(bad.image, FALLBACK_IMAGE);
   assert.deepEqual(bad.sizes, ["Único"]);
   assert.deepEqual(bad.colors, []);
@@ -361,6 +399,77 @@ test("defaultVariant: preenche tamanho/cor implícitos quando não há escolha a
   });
   // Mais de um tamanho/cor: não escolhe por conta própria (o cliente decide).
   assert.deepEqual(defaultVariant({ sizes: ["P", "M"], colors: [] }).size, undefined);
+});
+
+// ---------------------------------------------------------------- Tipo de produto (por categoria)
+test("attributesForType: cada tipo mostra só os atributos que fazem sentido para o objeto vendido", () => {
+  assert.deepEqual(attributesForType("perfume"), { volume: true, sizes: false, sizeLabel: "Tamanhos", colors: false });
+  assert.equal(attributesForType("clothing").sizes, true);
+  assert.equal(attributesForType("clothing").sizeLabel, "Tamanhos");
+  assert.equal(attributesForType("clothing").volume, false);
+  assert.equal(attributesForType("footwear").sizes, true);
+  assert.equal(attributesForType("footwear").sizeLabel, "Numeração");
+  assert.equal(attributesForType("glasses").sizes, false);
+  assert.equal(attributesForType("glasses").colors, true);
+  assert.equal(attributesForType("watch").sizes, false);
+  assert.equal(attributesForType("watch").colors, true);
+  // Tipo desconhecido/ausente cai em "generic", que preserva o comportamento anterior ao
+  // recurso (tamanho + cor) — categoria ainda não classificada não perde funcionalidade.
+  assert.deepEqual(attributesForType("generic"), attributesForType(undefined));
+  assert.deepEqual(attributesForType("algo-invalido"), attributesForType("generic"));
+});
+
+test("isProductType/PRODUCT_TYPES: só os 7 valores controlados são válidos", () => {
+  assert.deepEqual([...PRODUCT_TYPES].sort(), ["accessory", "clothing", "footwear", "generic", "glasses", "perfume", "watch"]);
+  for (const type of PRODUCT_TYPES) assert.equal(isProductType(type), true);
+  assert.equal(isProductType("perfumes"), false);
+  assert.equal(isProductType(""), false);
+  assert.equal(isProductType(null), false);
+  assert.equal(isProductType(undefined), false);
+});
+
+test("legado: perfume com volume em ml preso em sizes (ex.: Nice Girl pour Femme) não vira seletor de tamanho", () => {
+  // Caso real encontrado em produção: o produto tem volume_ml=null e sizes=['100ml'] de antes
+  // do campo volume existir. O tipo da categoria (perfume) passa a ser a autoridade: sizes é
+  // ignorado mesmo tendo mais de um valor legado, então nunca força escolha nem aparece na sacola.
+  const legacyPerfume = { sizes: ["100ml", "200ml"], colors: [], productType: "perfume" };
+  assert.equal(productRequiresVariant(legacyPerfume), false);
+  assert.deepEqual(defaultVariant(legacyPerfume), { size: undefined, color: undefined });
+
+  // O mesmo array de tamanhos, mas numa categoria de roupa de verdade, continua exigindo escolha.
+  const clothingWithSameSizes = { sizes: ["100ml", "200ml"], colors: [], productType: "clothing" };
+  assert.equal(productRequiresVariant(clothingWithSameSizes), true);
+});
+
+test("calçado: numeração única é assumida automaticamente; múltiplas exigem escolha", () => {
+  const oneSize = { sizes: ["40"], colors: [{ name: "Preto", hex: "#111" }], productType: "footwear" };
+  assert.equal(productRequiresVariant(oneSize), false);
+  assert.deepEqual(defaultVariant(oneSize), { size: "40", color: "Preto" });
+
+  const manySizes = { sizes: ["38", "39", "40"], colors: [], productType: "footwear" };
+  assert.equal(productRequiresVariant(manySizes), true);
+});
+
+test("óculos/relógio: cor é variação normal, mas nunca exigem tamanho/numeração", () => {
+  const glasses = { sizes: ["P", "M", "G"], colors: [{ name: "Preto", hex: "#111" }, { name: "Tartaruga", hex: "#654" }], productType: "glasses" };
+  // sizes tem 3 valores, mas óculos não usa sizes — só a cor (2 valores) exige escolha.
+  assert.equal(productRequiresVariant(glasses), true);
+  assert.deepEqual(defaultVariant(glasses).size, undefined);
+});
+
+test("cartItemFromProduct: só grava volume quando o tipo do produto realmente usa volume", () => {
+  const perfume = {
+    id: "p1", name: "Amalia", brand: "Xavier", image: "/img.webp", category: "Perfumes",
+    productType: "perfume", price: 160, sizes: ["Único"], colors: [], volumeMl: 100, stock: 5,
+  };
+  const item = cartItemFromProduct(perfume, {}, 1);
+  assert.equal(item.volumeMl, 100);
+
+  // Dado legado: volume_ml preenchido numa categoria que não é perfume (não deveria acontecer,
+  // mas se acontecer o tipo continua sendo a autoridade e a sacola não mostra "ml" indevido).
+  const mistyped = { ...perfume, productType: "clothing" };
+  const mistypedItem = cartItemFromProduct(mistyped, {}, 1);
+  assert.equal(mistypedItem.volumeMl, undefined);
 });
 
 test("isProductSoldOut: pelo selo Esgotado OU por estoque zerado", () => {

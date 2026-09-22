@@ -2,7 +2,14 @@
 // Sem imports em runtime (só tipos) para poder ser testado direto no Node.
 
 import type { StoreBadge, StoreProduct } from "@/lib/storeCatalog";
+import { DEFAULT_PRODUCT_TYPE, isProductType, type ProductType } from "./productType.ts";
 import type { AdminCategory, AdminProduct, ProductStatus, StoreSettings } from "./types";
+
+/** Nome + tipo da categoria de um produto — o suficiente para decidir quais atributos mostrar. */
+export interface ProductCategory {
+  name: string;
+  productType: ProductType;
+}
 
 export const FALLBACK_IMAGE = "/images/store/xavier-category-clothing.webp";
 
@@ -40,6 +47,12 @@ export interface CategoryRow {
   slug: string;
   sort_order: number;
   is_visible: boolean;
+  product_type: string;
+}
+
+/** Valor cru do banco -> ProductType validado; desconhecido/ausente cai em "generic". */
+export function parseProductType(value: string | null | undefined): ProductType {
+  return isProductType(value) ? value : DEFAULT_PRODUCT_TYPE;
 }
 
 export interface StoreSettingsRow {
@@ -98,14 +111,15 @@ function parseColors(value: unknown): Array<{ name: string; hex: string }> {
   return colors;
 }
 
-function baseProduct(row: ProductRow, category: string, storagePrefix: string): StoreProduct {
+function baseProduct(row: ProductRow, category: ProductCategory, storagePrefix: string): StoreProduct {
   const originalPrice = row.original_price == null ? undefined : Number(row.original_price);
   return {
     id: row.id,
     slug: row.slug,
     brand: row.brand,
     name: row.name,
-    category,
+    category: category.name,
+    productType: category.productType,
     price: Number(row.price),
     originalPrice,
     image: safeImageSrc(row.image_url, storagePrefix),
@@ -122,14 +136,14 @@ function baseProduct(row: ProductRow, category: string, storagePrefix: string): 
 }
 
 /** Produto como o cliente vê: status "out-of-stock" aparece como selo "Esgotado". */
-export function toStoreProduct(row: ProductRow, category: string, storagePrefix: string): StoreProduct {
+export function toStoreProduct(row: ProductRow, category: ProductCategory, storagePrefix: string): StoreProduct {
   const product = baseProduct(row, category, storagePrefix);
   if (row.status === "out-of-stock") product.badge = "Esgotado";
   return product;
 }
 
 /** Produto como o lojista edita: valores exatamente como gravados. */
-export function toAdminProduct(row: ProductRow, category: string, storagePrefix: string): AdminProduct {
+export function toAdminProduct(row: ProductRow, category: ProductCategory, storagePrefix: string): AdminProduct {
   return {
     ...baseProduct(row, category, storagePrefix),
     stock: row.stock ?? 0,
@@ -139,7 +153,7 @@ export function toAdminProduct(row: ProductRow, category: string, storagePrefix:
 }
 
 export function toAdminCategory(row: CategoryRow): AdminCategory {
-  return { id: row.id, name: row.name, visible: row.is_visible };
+  return { id: row.id, name: row.name, visible: row.is_visible, productType: parseProductType(row.product_type) };
 }
 
 export function toStoreSettings(row: StoreSettingsRow | null | undefined): StoreSettings {

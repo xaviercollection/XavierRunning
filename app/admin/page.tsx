@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { AdminDashboard } from "@/components/admin/AdminDashboard";
 import { AdminNoAccess } from "@/components/admin/AdminNoAccess";
 import { getAdminSession } from "@/lib/auth/admin";
+import { getFinanceTransactions } from "@/lib/finance/queries";
 import { getAdminStoreData } from "@/lib/store/queries";
 
 // Dados e sessão são por requisição: nunca prerenderizar nem cachear esta página.
@@ -22,13 +23,14 @@ export default async function AdminPage() {
   if (session.status === "anonymous") redirect("/admin/login");
   if (session.status === "not-admin") return <AdminNoAccess email={session.email} />;
 
-  const data = await getAdminStoreData();
+  const [data, transactions] = await Promise.all([getAdminStoreData(), getFinanceTransactions()]);
 
   return (
     <AdminDashboard
       initialProducts={data.products}
       initialCategories={data.categories}
       initialSettings={data.settings}
+      initialTransactions={transactions}
       adminEmail={session.email}
     />
   );

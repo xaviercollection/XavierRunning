@@ -7,6 +7,7 @@
 import Image from "next/image";
 import { useCart } from "@/components/cart/CartProvider";
 import { formatStorePrice } from "@/lib/storeCatalog";
+import { attributesForType } from "@/lib/store/productType";
 import { buildWhatsAppUrl, resolveWhatsappNumber, type WhatsAppLine } from "@/lib/store/whatsapp";
 
 interface CartDrawerProps {
@@ -31,6 +32,7 @@ export function CartDrawer({ open, onClose, whatsapp }: CartDrawerProps) {
       unitPrice: item.price,
       volumeMl: item.volumeMl,
       size: item.size,
+      sizeLabel: attributesForType(item.productType).sizeLabel,
       color: item.color,
     }));
     const url = buildWhatsAppUrl(resolveWhatsappNumber(whatsapp), lines);
@@ -79,9 +81,10 @@ export function CartDrawer({ open, onClose, whatsapp }: CartDrawerProps) {
             <div className="space-y-6">
               {items.map((item) => {
                 const atMax = item.quantity >= item.stock;
+                const sizeLabel = attributesForType(item.productType).sizeLabel;
                 const attributes = [
                   item.volumeMl ? `${item.volumeMl}ml` : null,
-                  item.size ? `Tamanho ${item.size}` : null,
+                  item.size ? `${sizeLabel} ${item.size}` : null,
                   item.color ? `Cor ${item.color}` : null,
                 ].filter((value): value is string => Boolean(value));
 

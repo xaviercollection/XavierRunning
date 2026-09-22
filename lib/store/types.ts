@@ -1,4 +1,5 @@
 import type { StoreBadge, StoreProduct } from "@/lib/storeCatalog";
+import type { ProductType } from "./productType";
 
 export type ProductStatus = "active" | "draft" | "out-of-stock";
 
@@ -8,7 +9,7 @@ export type AdminProduct = StoreProduct & {
   isFeatured: boolean;
 };
 
-export type AdminCategory = { id: string; name: string; visible: boolean };
+export type AdminCategory = { id: string; name: string; visible: boolean; productType: ProductType };
 
 export type StoreSettings = {
   eyebrow: string;

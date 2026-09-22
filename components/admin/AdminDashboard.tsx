@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useMemo, useRef, useState } from "react";
 import { signOutAction } from "@/app/admin/login/actions";
 import { FinanceDashboard } from "@/components/admin/FinanceDashboard";
+import type { FinanceTransaction } from "@/lib/finance/types";
 import { formatStorePrice, type StoreBadge } from "@/lib/storeCatalog";
 import {
   createCategoryAction,
@@ -15,6 +16,7 @@ import {
   reorderFeaturedAction,
   saveProductAction,
   saveStoreSettingsAction,
+  setCategoryProductTypeAction,
   setCategoryVisibilityAction,
   setProductFeaturedAction,
   setProductStatusAction,
@@ -28,6 +30,7 @@ import type {
   StoreSettings,
 } from "@/lib/store/types";
 import { safeImageSrc } from "@/lib/store/mappers";
+import { attributesForType, PRODUCT_TYPES, PRODUCT_TYPE_LABELS, type ProductType } from "@/lib/store/productType";
 import { createClient } from "@/lib/supabase/client";
 import { getProductImagesPublicPrefixSafe } from "@/lib/supabase/env";
 
@@ -82,6 +85,7 @@ interface AdminDashboardProps {
   initialProducts: AdminProduct[];
   initialCategories: AdminCategory[];
   initialSettings: StoreSettings;
+  initialTransactions: FinanceTransaction[];
   adminEmail: string;
 }
 
@@ -89,6 +93,7 @@ export function AdminDashboard({
   initialProducts,
   initialCategories,
   initialSettings,
+  initialTransactions,
   adminEmail,
 }: AdminDashboardProps) {
   const [section, setSection] = useState<AdminSection>("overview");
@@ -295,14 +300,34 @@ export function AdminDashboard({
     }
   }
 
-  async function createCategory(name: string) {
-    const result = await runAction(() => createCategoryAction(name));
+  async function createCategory(name: string, productType: ProductType) {
+    const result = await runAction(() => createCategoryAction(name, productType));
     if (!result.ok) {
       showToast(result.error);
       return;
     }
     setCategories((current) => [...current, result.data]);
     showToast("Categoria criada.");
+  }
+
+  async function changeCategoryType(id: string, productType: ProductType) {
+    const current = categories.find((item) => item.id === id);
+    if (!current || current.productType === productType) return;
+    const previousType = current.productType;
+
+    setCategories((list) => list.map((item) => (item.id === id ? { ...item, productType } : item)));
+    const result = await runAction(() => setCategoryProductTypeAction(id, productType));
+    if (!result.ok) {
+      setCategories((list) => list.map((item) => (item.id === id ? { ...item, productType: previousType } : item)));
+      showToast(result.error);
+      return;
+    }
+    // Mantém os produtos da categoria em sincronia sem precisar recarregar a página: o
+    // formulário de edição depende do tipo para decidir quais campos mostrar.
+    setProducts((list) =>
+      list.map((product) => (product.category === current.name ? { ...product, productType } : product)),
+    );
+    showToast("Tipo da categoria atualizado.");
   }
 
   async function renameCategory(id: string, name: string) {
@@ -457,7 +482,7 @@ export function AdminDashboard({
           )}
 
           {section === "finance" && (
-            <FinanceDashboard onNotify={showToast} />
+            <FinanceDashboard initialTransactions={initialTransactions} onNotify={showToast} />
           )}
 
           {section === "products" && (
@@ -494,6 +519,7 @@ export function AdminDashboard({
               onMove={moveCategory}
               onCreate={createCategory}
               onRename={renameCategory}
+              onChangeType={changeCategoryType}
               onRequestDelete={setPendingDeleteCategory}
             />
           )}
@@ -692,17 +718,20 @@ function CategoriesSection({
   onMove,
   onCreate,
   onRename,
+  onChangeType,
   onRequestDelete,
 }: {
   categories: AdminCategory[];
   products: AdminProduct[];
   onToggleVisibility: (id: string) => void;
   onMove: (index: number, direction: -1 | 1) => void;
-  onCreate: (name: string) => void;
+  onCreate: (name: string, productType: ProductType) => void;
   onRename: (id: string, name: string) => void;
+  onChangeType: (id: string, productType: ProductType) => void;
   onRequestDelete: (category: AdminCategory) => void;
 }) {
   const [newCategoryName, setNewCategoryName] = useState("");
+  const [newCategoryType, setNewCategoryType] = useState<ProductType>("generic");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
 
@@ -710,8 +739,9 @@ function CategoriesSection({
     event.preventDefault();
     const trimmed = newCategoryName.trim();
     if (!trimmed) return;
-    onCreate(trimmed);
+    onCreate(trimmed, newCategoryType);
     setNewCategoryName("");
+    setNewCategoryType("generic");
   }
 
   function startEditing(category: AdminCategory) {
@@ -731,6 +761,7 @@ function CategoriesSection({
 
       <form onSubmit={submitNewCategory} className="flex flex-col gap-3 border-b border-white/[0.07] p-5 sm:flex-row sm:items-center md:p-6">
         <label className="flex-1"><span className="sr-only">Nome da nova categoria</span><input value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} placeholder="Nome da nova categoria" maxLength={60} className="admin-input w-full" /></label>
+        <label className="sm:w-44"><span className="sr-only">Tipo de produto</span><select value={newCategoryType} onChange={(e) => setNewCategoryType(e.target.value as ProductType)} className="admin-select w-full">{PRODUCT_TYPES.map((type) => <option key={type} value={type}>{PRODUCT_TYPE_LABELS[type]}</option>)}</select></label>
         <button type="submit" disabled={!newCategoryName.trim()} className="admin-button-primary shrink-0 disabled:cursor-not-allowed disabled:opacity-40"><AdminIcon kind="plus" className="h-4 w-4" /> Nova categoria</button>
       </form>
 
@@ -754,6 +785,20 @@ function CategoriesSection({
                   <button type="button" onClick={() => onToggleVisibility(category.id)} className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${category.visible ? "bg-gold" : "bg-white/10"}`} aria-label={`${category.visible ? "Ocultar" : "Exibir"} ${category.name}`}><span className={`absolute top-1 h-4 w-4 rounded-full bg-black transition-transform ${category.visible ? "translate-x-6" : "translate-x-1"}`} /></button>
                 )}
               </div>
+              {!isEditing && (
+                <label className="mt-4 block">
+                  <span className="mb-1.5 block text-[8px] tracking-[0.22em] text-ink-faint uppercase">Tipo de produto</span>
+                  <select
+                    value={category.productType}
+                    onChange={(e) => onChangeType(category.id, e.target.value as ProductType)}
+                    className="admin-select w-full py-1.5 text-xs"
+                  >
+                    {PRODUCT_TYPES.map((type) => (
+                      <option key={type} value={type}>{PRODUCT_TYPE_LABELS[type]}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
               <div className="mt-6 flex items-center justify-between border-t border-white/[0.06] pt-4">
                 <span className="text-[9px] text-ink-faint">POSIÇÃO {String(index + 1).padStart(2, "0")}</span>
                 <div className="flex gap-1">
@@ -844,6 +889,16 @@ function ProductEditor({ draft, setDraft, categories, saving, isNew, onClose, on
   const discount = promotionEnabled && !promotionInvalid
     ? Math.round((1 - draft.price / draft.originalPrice!) * 100)
     : 0;
+
+  // O formulário reage ao TIPO da categoria selecionada (perfume/roupa/calçado/...), não ao
+  // nome dela — ver lib/store/productType.ts. Trocar de categoria nunca apaga dado nenhum do
+  // produto: campos que o novo tipo não usa só saem de vista (aviso abaixo, com opção de limpar).
+  const currentType = categories.find((category) => category.name === draft.category)?.productType ?? "generic";
+  const attrs = attributesForType(currentType);
+  const hasHiddenSizes = !attrs.sizes && draft.sizes.length > 0 && !(draft.sizes.length === 1 && draft.sizes[0] === "Único");
+  const hasHiddenColors = !attrs.colors && draft.colors.length > 0;
+  const hasHiddenVolume = !attrs.volume && draft.volumeMl != null;
+
   return (
     <div className="fixed inset-0 z-[90] bg-black/70 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label={isNew ? "Novo produto" : `Editar ${draft.name}`}>
       <button type="button" className="absolute inset-0 cursor-default" onClick={onClose} aria-label="Fechar editor" />
@@ -873,8 +928,96 @@ function ProductEditor({ draft, setDraft, categories, saving, isNew, onClose, on
                 {promotionInvalid && <p className="-mt-2 text-[10px] text-red-300 md:col-span-2">O preço anterior precisa ser maior que o preço de venda.</p>}
               </>
             )}
-            <AdminField label="Tamanhos" className="md:col-span-2"><input value={draft.sizes.join(", ")} onChange={(e) => update("sizes", e.target.value.split(",").map((item) => item.trim()).filter(Boolean))} className="admin-input" placeholder="P, M, G, GG" /></AdminField>
-            <AdminField label="Volume (ml) — opcional, use para perfumes"><input type="number" min="1" step="1" value={draft.volumeMl ?? ""} onChange={(e) => update("volumeMl", e.target.value === "" ? undefined : Math.max(1, Math.round(Number(e.target.value))))} className="admin-input" placeholder="Ex.: 100" /></AdminField>
+
+            {(hasHiddenSizes || hasHiddenColors || hasHiddenVolume) && (
+              <div className="border border-amber-400/15 bg-amber-400/[0.04] p-4 md:col-span-2">
+                <p className="text-[9px] tracking-[0.18em] text-amber-300 uppercase">
+                  Dados que &quot;{PRODUCT_TYPE_LABELS[currentType]}&quot; não usa
+                </p>
+                <p className="mt-1 text-[10px] leading-relaxed text-ink-faint">
+                  Nada foi apagado — esses valores continuam salvos, só não aparecem na loja para esta categoria.
+                </p>
+                <div className="mt-3 space-y-2">
+                  {hasHiddenSizes && (
+                    <div className="flex items-center justify-between gap-3 text-[11px] text-ink-muted">
+                      <span className="min-w-0 truncate">Tamanhos: {draft.sizes.join(", ")}</span>
+                      <button type="button" onClick={() => update("sizes", ["Único"])} className="shrink-0 text-[10px] text-gold hover:text-champagne">Limpar</button>
+                    </div>
+                  )}
+                  {hasHiddenColors && (
+                    <div className="flex items-center justify-between gap-3 text-[11px] text-ink-muted">
+                      <span className="min-w-0 truncate">Cores: {draft.colors.map((c) => c.name || "(sem nome)").join(", ")}</span>
+                      <button type="button" onClick={() => update("colors", [])} className="shrink-0 text-[10px] text-gold hover:text-champagne">Limpar</button>
+                    </div>
+                  )}
+                  {hasHiddenVolume && (
+                    <div className="flex items-center justify-between gap-3 text-[11px] text-ink-muted">
+                      <span className="min-w-0 truncate">Volume: {draft.volumeMl}ml</span>
+                      <button type="button" onClick={() => update("volumeMl", undefined)} className="shrink-0 text-[10px] text-gold hover:text-champagne">Limpar</button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {attrs.sizes && (
+              <AdminField label={attrs.sizeLabel} className="md:col-span-2">
+                <input
+                  value={draft.sizes.join(", ")}
+                  onChange={(e) => update("sizes", e.target.value.split(",").map((item) => item.trim()).filter(Boolean))}
+                  className="admin-input"
+                  placeholder={attrs.sizeLabel === "Numeração" ? "38, 39, 40, 41" : "P, M, G, GG"}
+                />
+              </AdminField>
+            )}
+            {attrs.volume && (
+              <AdminField label="Volume (ml)">
+                <input type="number" min="1" step="1" value={draft.volumeMl ?? ""} onChange={(e) => update("volumeMl", e.target.value === "" ? undefined : Math.max(1, Math.round(Number(e.target.value))))} className="admin-input" placeholder="Ex.: 100" />
+              </AdminField>
+            )}
+            {attrs.colors && (
+              <div className="md:col-span-2">
+                <span className="mb-2 block text-[8px] tracking-[0.22em] text-ink-faint uppercase">Cores</span>
+                <div className="space-y-2">
+                  {draft.colors.map((color, index) => (
+                    <div key={index} className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        value={/^#[0-9a-fA-F]{6}$/.test(color.hex) ? color.hex : "#111111"}
+                        onChange={(e) => update("colors", draft.colors.map((c, i) => (i === index ? { ...c, hex: e.target.value } : c)))}
+                        className="h-9 w-9 shrink-0 cursor-pointer border border-white/10 bg-transparent p-0"
+                        aria-label={`Cor (hex) de ${color.name || `cor ${index + 1}`}`}
+                      />
+                      <input
+                        value={color.name}
+                        onChange={(e) => update("colors", draft.colors.map((c, i) => (i === index ? { ...c, name: e.target.value } : c)))}
+                        maxLength={40}
+                        className="admin-input flex-1"
+                        placeholder="Nome da cor (ex.: Preto)"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => update("colors", draft.colors.filter((_, i) => i !== index))}
+                        className="admin-icon-button shrink-0 hover:border-red-400/30 hover:text-red-300"
+                        aria-label={`Remover cor ${color.name || index + 1}`}
+                      >
+                        <AdminIcon kind="trash" className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))}
+                  {draft.colors.length === 0 && <p className="text-[10px] text-ink-faint">Nenhuma cor cadastrada.</p>}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => update("colors", [...draft.colors, { name: "", hex: "#111111" }])}
+                  disabled={draft.colors.length >= 12}
+                  className="admin-button-secondary mt-3 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <AdminIcon kind="plus" className="h-4 w-4" /> Adicionar cor
+                </button>
+                {draft.colors.length >= 12 && <p className="mt-2 text-[10px] text-ink-faint">Máximo de 12 cores por produto.</p>}
+              </div>
+            )}
             <AdminField label="Caminho da imagem" className="md:col-span-2"><input value={draft.image} onChange={(e) => update("image", e.target.value)} className="admin-input" /></AdminField>
             <AdminField label="Descrição" className="md:col-span-2"><textarea value={draft.description} onChange={(e) => update("description", e.target.value)} className="admin-textarea" rows={4} /></AdminField>
             <label className="flex cursor-pointer items-center justify-between border border-white/[0.07] p-4 md:col-span-2"><div><p className="text-xs text-ink">Produto em destaque</p><p className="mt-1 text-[10px] text-ink-faint">Exibir com prioridade na vitrine</p></div><input type="checkbox" checked={draft.isFeatured} onChange={(e) => update("isFeatured", e.target.checked)} className="h-4 w-4 accent-[#c8a45d]" /></label>

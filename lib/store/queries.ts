@@ -63,10 +63,10 @@ export const getPublicStoreData = cache(async (): Promise<PublicStoreData> => {
   assertNoError(settingsResult.error, "a configuração da loja");
 
   const categories = categoriesResult.data ?? [];
-  const nameById = new Map(categories.map((category) => [category.id, category.name]));
+  const byId = new Map(categories.map((category) => [category.id, toAdminCategory(category)]));
 
   const products = (productsResult.data ?? []).flatMap((row) => {
-    const category = nameById.get(row.category_id);
+    const category = byId.get(row.category_id);
     return category ? [toStoreProduct(row, category, storagePrefix)] : [];
   });
 
@@ -112,11 +112,12 @@ export async function getAdminStoreData(): Promise<AdminStoreData> {
   assertNoError(settingsResult.error, "a configuração da loja");
 
   const categories = categoriesResult.data ?? [];
-  const nameById = new Map(categories.map((category) => [category.id, category.name]));
+  const byId = new Map(categories.map((category) => [category.id, toAdminCategory(category)]));
+  const fallbackCategory = { name: "Sem categoria", productType: "generic" as const };
 
   return {
     products: (productsResult.data ?? []).map((row) =>
-      toAdminProduct(row, nameById.get(row.category_id) ?? "Sem categoria", storagePrefix),
+      toAdminProduct(row, byId.get(row.category_id) ?? fallbackCategory, storagePrefix),
     ),
     categories: categories.map(toAdminCategory),
     settings: toStoreSettings(settingsResult.data),

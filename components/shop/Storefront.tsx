@@ -7,6 +7,7 @@ import { CartDrawer } from "@/components/cart/CartDrawer";
 import { useCart } from "@/components/cart/CartProvider";
 import { formatStorePrice, type StoreProduct } from "@/lib/storeCatalog";
 import { defaultVariant, isProductSoldOut, productRequiresVariant, type CartVariant } from "@/lib/store/cart";
+import { attributesForType } from "@/lib/store/productType";
 
 type SortMode = "featured" | "price-asc" | "price-desc" | "popular";
 
@@ -49,7 +50,12 @@ export function Storefront({ products: catalog, categories, hero, whatsapp }: St
     [catalog],
   );
   const sizes = useMemo(
-    () => Array.from(new Set(catalog.flatMap((product) => product.sizes))),
+    () =>
+      Array.from(
+        new Set(
+          catalog.flatMap((product) => (attributesForType(product.productType).sizes ? product.sizes : [])),
+        ),
+      ),
     [catalog],
   );
   const priceCeiling = useMemo(
@@ -194,8 +200,9 @@ export function Storefront({ products: catalog, categories, hero, whatsapp }: St
 
   function confirmAddFromQuickView() {
     if (!quickView) return;
-    const needsSize = quickView.sizes.length > 1;
-    const needsColor = quickView.colors.length > 1;
+    const attrs = attributesForType(quickView.productType);
+    const needsSize = attrs.sizes && quickView.sizes.length > 1;
+    const needsColor = attrs.colors && quickView.colors.length > 1;
     if ((needsSize && !quickSize) || (needsColor && !quickColor)) return;
 
     const fallback = defaultVariant(quickView);
@@ -518,7 +525,9 @@ export function Storefront({ products: catalog, categories, hero, whatsapp }: St
         </div>
       </footer>
 
-      {quickView && (
+      {quickView && (() => {
+        const quickViewAttrs = attributesForType(quickView.productType);
+        return (
         <div className="fixed inset-0 z-[90] flex items-end justify-center bg-black/75 backdrop-blur-sm md:items-center" role="dialog" aria-modal="true" aria-label={`Detalhes de ${quickView.name}`}>
           <button className="absolute inset-0 cursor-default" onClick={() => setQuickView(null)} aria-label="Fechar detalhes" />
           <div className="store-drawer-enter relative z-10 grid max-h-[92svh] w-full max-w-5xl overflow-y-auto border border-white/10 bg-[#080808] md:grid-cols-[1.05fr_.95fr]">
@@ -543,13 +552,13 @@ export function Storefront({ products: catalog, categories, hero, whatsapp }: St
               </h2>
               <p className="mt-5 flex items-baseline gap-3 text-xl text-champagne">
                 {formatStorePrice(quickView.price)}
-                {quickView.volumeMl && (
+                {quickViewAttrs.volume && quickView.volumeMl && (
                   <span className="text-sm tracking-[0.12em] text-ink-faint uppercase">{quickView.volumeMl}ml</span>
                 )}
               </p>
               <p className="mt-6 max-w-md text-sm leading-relaxed text-ink-muted">{quickView.description}</p>
 
-              {quickView.colors.length > 1 ? (
+              {quickViewAttrs.colors && quickView.colors.length > 1 ? (
                 <div className="mt-8">
                   <p className="text-[9px] tracking-[0.3em] text-ink-faint uppercase">Selecione a cor</p>
                   <div className="mt-3 flex flex-wrap gap-2">
@@ -567,7 +576,7 @@ export function Storefront({ products: catalog, categories, hero, whatsapp }: St
                     ))}
                   </div>
                 </div>
-              ) : quickView.colors.length === 1 ? (
+              ) : quickViewAttrs.colors && quickView.colors.length === 1 ? (
                 <div className="mt-8">
                   <p className="text-[9px] tracking-[0.3em] text-ink-faint uppercase">Cor</p>
                   <p className="mt-3 flex items-center gap-2 text-[10px] text-ink-muted">
@@ -577,9 +586,9 @@ export function Storefront({ products: catalog, categories, hero, whatsapp }: St
                 </div>
               ) : null}
 
-              {quickView.sizes.length > 1 && (
+              {quickViewAttrs.sizes && quickView.sizes.length > 1 && (
                 <div className="mt-8">
-                  <p className="text-[9px] tracking-[0.3em] text-ink-faint uppercase">Selecione o tamanho</p>
+                  <p className="text-[9px] tracking-[0.3em] text-ink-faint uppercase">Selecione {quickViewAttrs.sizeLabel === "Numeração" ? "a numeração" : "o tamanho"}</p>
                   <div className="mt-3 flex flex-wrap gap-2">
                     {quickView.sizes.map((size) => (
                       <button key={size} type="button" onClick={() => setQuickSize(size)} aria-pressed={quickSize === size} className={`min-w-11 border px-3 py-2.5 text-[10px] ${quickSize === size ? "border-gold bg-gold text-black" : "border-white/15 text-ink-muted hover:border-white/40"}`}>
@@ -592,12 +601,12 @@ export function Storefront({ products: catalog, categories, hero, whatsapp }: St
 
               {(() => {
                 const soldOut = isProductSoldOut(quickView);
-                const missingSize = quickView.sizes.length > 1 && !quickSize;
-                const missingColor = quickView.colors.length > 1 && !quickColor;
+                const missingSize = quickViewAttrs.sizes && quickView.sizes.length > 1 && !quickSize;
+                const missingColor = quickViewAttrs.colors && quickView.colors.length > 1 && !quickColor;
                 const label = soldOut
                   ? "Produto esgotado"
                   : missingSize
-                    ? "Selecione um tamanho"
+                    ? `Selecione ${quickViewAttrs.sizeLabel === "Numeração" ? "a numeração" : "um tamanho"}`
                     : missingColor
                       ? "Selecione uma cor"
                       : "Adicionar à sacola";
@@ -615,7 +624,8 @@ export function Storefront({ products: catalog, categories, hero, whatsapp }: St
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       <CartDrawer open={cartOpen} onClose={() => setCartOpen(false)} whatsapp={whatsapp} />
 
@@ -777,6 +787,7 @@ function ProductCard({
   const soldOut = isProductSoldOut(product);
   const effectiveBadge = soldOut ? "Esgotado" : product.badge;
   const ctaLabel = soldOut ? "Esgotado" : "Adicionar à sacola";
+  const attrs = attributesForType(product.productType);
   return (
     <article className="store-card-enter group min-w-0" style={{ animationDelay: `${Math.min(index, 7) * 70}ms` }}>
       <div className="relative aspect-[3/4] overflow-hidden bg-[#0a0a0a]">
@@ -824,7 +835,7 @@ function ProductCard({
           <div className="min-w-0">
             <p className="text-[8px] tracking-[0.3em] text-gold uppercase md:text-[9px]">{product.brand}</p>
             <h3 className="mt-1 truncate font-display text-[clamp(1.1rem,2vw,1.55rem)] leading-tight">{product.name}</h3>
-            {product.volumeMl && (
+            {attrs.volume && product.volumeMl && (
               <p className="mt-0.5 text-[9px] tracking-[0.16em] text-ink-faint uppercase">{product.volumeMl}ml</p>
             )}
           </div>
@@ -839,12 +850,7 @@ function ProductCard({
             </p>
           </div>
         </div>
-        <div className="mt-3 flex items-center justify-between gap-3">
-          <div className="flex gap-1.5" aria-label={`${product.colors.length} cores disponíveis`}>
-            {product.colors.map((color) => (
-              <span key={color.name} title={color.name} className="h-3 w-3 rounded-full border border-white/20" style={{ backgroundColor: color.hex }} />
-            ))}
-          </div>
+        <div className="mt-3 flex items-center justify-end gap-3">
           <button
             type="button"
             onClick={onAddToBag}

@@ -1,6 +1,8 @@
 // Catálogo INICIAL (seed). Em produção a loja e o painel leem o Supabase; este arquivo é a
 // fonte de scripts/generate-seed-migration.mjs, que gera a migration 20260921120500_seed_catalog.sql.
 // Não importe STORE_PRODUCTS/STORE_CATEGORIES para renderizar a loja.
+import type { ProductType } from "./store/productType";
+
 export const STORE_CATEGORIES = [
   "Todos",
   "Perfumes",
@@ -25,6 +27,12 @@ export interface StoreProduct {
   brand: string;
   name: string;
   category: StoreCategory;
+  /**
+   * Tipo da categoria (categories.product_type) — decide quais atributos fazem sentido para
+   * este produto (ver lib/store/productType.ts). Opcional só porque o catálogo semente não o
+   * define; toda leitura vinda do Supabase sempre preenche.
+   */
+  productType?: ProductType;
   price: number;
   originalPrice?: number;
   image: string;

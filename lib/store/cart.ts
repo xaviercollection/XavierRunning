@@ -7,6 +7,7 @@
 // produto, não é escolha do cliente.
 
 import type { StoreProduct } from "@/lib/storeCatalog";
+import { attributesForType, type ProductType } from "./productType.ts";
 
 export interface CartVariant {
   size?: string;
@@ -23,6 +24,8 @@ export interface CartItem {
   imagePosition?: string;
   imageFit?: "cover" | "contain";
   category: string;
+  /** Tipo da categoria no momento da adição — decide o rótulo de `size` (Tamanho/Numeração). */
+  productType?: ProductType;
   price: number;
   originalPrice?: number;
   quantity: number;
@@ -37,21 +40,33 @@ export function cartItemKey(productId: string, variant: CartVariant): string {
   return `${productId}::${variant.size ?? ""}::${variant.color ?? ""}`;
 }
 
-/** Mais de um tamanho real OU mais de uma cor cadastrada exige escolha do cliente. */
-export function productRequiresVariant(product: Pick<StoreProduct, "sizes" | "colors">): boolean {
-  return product.sizes.length > 1 || product.colors.length > 1;
+type VariantProduct = Pick<StoreProduct, "sizes" | "colors" | "productType">;
+
+/**
+ * Só considera `sizes`/`colors` relevantes quando o TIPO do produto os usa — um perfume com
+ * "100ml" preso em `sizes` (dado legado) não conta como tamanho, porque perfume não usa esse
+ * campo (ver lib/store/productType.ts). Mais de um valor relevante exige escolha do cliente.
+ */
+export function productRequiresVariant(product: VariantProduct): boolean {
+  const attrs = attributesForType(product.productType);
+  const sizeCount = attrs.sizes ? product.sizes.length : 0;
+  const colorCount = attrs.colors ? product.colors.length : 0;
+  return sizeCount > 1 || colorCount > 1;
 }
 
 /**
  * Variação implícita quando não há escolha a fazer: o único tamanho cadastrado (se não for o
- * placeholder "Único") e a única cor cadastrada, quando existirem.
+ * placeholder "Único") e a única cor cadastrada, quando existirem e o tipo do produto os usa.
  */
-export function defaultVariant(product: Pick<StoreProduct, "sizes" | "colors">): CartVariant {
-  const [onlySize] = product.sizes;
-  const [onlyColor] = product.colors;
+export function defaultVariant(product: VariantProduct): CartVariant {
+  const attrs = attributesForType(product.productType);
+  const sizes = attrs.sizes ? product.sizes : [];
+  const colors = attrs.colors ? product.colors : [];
+  const [onlySize] = sizes;
+  const [onlyColor] = colors;
   return {
-    size: product.sizes.length === 1 && onlySize !== "Único" ? onlySize : undefined,
-    color: product.colors.length === 1 ? onlyColor.name : undefined,
+    size: sizes.length === 1 && onlySize !== "Único" ? onlySize : undefined,
+    color: colors.length === 1 ? onlyColor.name : undefined,
   };
 }
 
@@ -83,6 +98,7 @@ export function cartCount(items: Array<Pick<CartItem, "quantity">>): number {
 }
 
 export function cartItemFromProduct(product: StoreProduct, variant: CartVariant, quantity: number): CartItem {
+  const attrs = attributesForType(product.productType);
   return {
     key: cartItemKey(product.id, variant),
     productId: product.id,
@@ -93,11 +109,14 @@ export function cartItemFromProduct(product: StoreProduct, variant: CartVariant,
     imagePosition: product.imagePosition,
     imageFit: product.imageFit,
     category: product.category,
+    productType: product.productType,
     price: product.price,
     originalPrice: product.originalPrice,
     quantity,
     stock: product.stock ?? Number.MAX_SAFE_INTEGER,
-    volumeMl: product.volumeMl,
+    // O tipo é a autoridade: dado legado num campo que o tipo não usa (ex.: "100ml" em sizes
+    // de um perfume) nunca chega à sacola, mesmo que ainda exista na linha do banco.
+    volumeMl: attrs.volume ? product.volumeMl : undefined,
     size: variant.size,
     color: variant.color,
   };

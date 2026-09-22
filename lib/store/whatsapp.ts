@@ -11,8 +11,10 @@ export interface WhatsAppLine {
   unitPrice: number;
   /** ml, quando o produto tiver volume cadastrado (ex.: perfumes). */
   volumeMl?: number;
-  /** Tamanho escolhido pelo cliente, quando o produto tiver mais de um. */
+  /** Tamanho/numeração escolhido pelo cliente, quando o produto tiver mais de um. */
   size?: string;
+  /** Rótulo de `size`: "Tamanho" (roupa) ou "Numeração" (calçado). Padrão: "Tamanho". */
+  sizeLabel?: string;
   /** Cor escolhida pelo cliente, quando o produto tiver mais de uma. */
   color?: string;
 }
@@ -21,7 +23,7 @@ export interface WhatsAppLine {
 function attributeLines(line: WhatsAppLine, indent: string): string[] {
   const lines: string[] = [];
   if (line.volumeMl != null) lines.push(`${indent}Volume: ${line.volumeMl}ml`);
-  if (line.size) lines.push(`${indent}Tamanho: ${line.size}`);
+  if (line.size) lines.push(`${indent}${line.sizeLabel ?? "Tamanho"}: ${line.size}`);
   if (line.color) lines.push(`${indent}Cor: ${line.color}`);
   return lines;
 }

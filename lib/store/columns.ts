@@ -33,7 +33,7 @@ export const PUBLIC_PRODUCT_COLUMNS = [
 
 export const ADMIN_PRODUCT_COLUMNS = PUBLIC_PRODUCT_COLUMNS;
 
-export const CATEGORY_COLUMNS = ["id", "name", "slug", "sort_order", "is_visible"] as const;
+export const CATEGORY_COLUMNS = ["id", "name", "slug", "sort_order", "is_visible", "product_type"] as const;
 
 export const STORE_SETTINGS_COLUMNS = [
   "eyebrow",

@@ -6,10 +6,11 @@
 //   * Nenhuma action toca em estoque além do valor que o lojista digitou no editor.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { done, fail, withAdmin, type DbError } from "@/lib/admin/withAdmin";
 import { getProductImagesPublicPrefix } from "@/lib/supabase/env";
-import { createClient } from "@/lib/supabase/server";
 import { ADMIN_PRODUCT_COLUMNS, CATEGORY_COLUMNS, PRODUCT_IMAGES_BUCKET } from "./columns";
 import {
+  parseProductType,
   toAdminCategory,
   toAdminProduct,
   toStoreSettings,
@@ -17,6 +18,7 @@ import {
   type ProductRow,
   type StoreSettingsRow,
 } from "./mappers";
+import { isProductType, type ProductType } from "./productType";
 import type {
   ActionResult,
   AdminCategory,
@@ -36,14 +38,6 @@ import {
   toStoreSettingsRow,
 } from "./validation";
 
-const fail = (error: string): ActionResult<never> => ({ ok: false, error });
-const done = <T>(data: T): ActionResult<T> => ({ ok: true, data });
-
-interface DbError {
-  code?: string;
-  message: string;
-}
-
 function describeDbError(error: DbError): string {
   switch (error.code) {
     case "23514":
@@ -61,33 +55,8 @@ function describeDbError(error: DbError): string {
   }
 }
 
-/**
- * Porta única de entrada de toda action: exige sessão válida + is_admin() e captura QUALQUER
- * exceção (rede, Supabase fora do ar, env ausente) devolvendo { ok:false } em vez de lançar —
- * assim o painel nunca fica preso em "Salvando…". A validação de entrada roda dentro de `run`,
- * então quem não é admin não recebe nem mensagens de validação.
- */
-async function withAdmin<T>(
-  run: (supabase: SupabaseClient) => Promise<ActionResult<T>>,
-): Promise<ActionResult<T>> {
-  try {
-    const supabase = await createClient();
-
-    const { data: userData, error: userError } = await supabase.auth.getUser();
-    if (userError || !userData.user) return fail("Sessão expirada. Entre novamente.");
-
-    const { data: isAdmin, error: adminError } = await supabase.rpc("is_admin");
-    if (adminError || isAdmin !== true) return fail("Sem permissão de administrador.");
-
-    return await run(supabase);
-  } catch (error) {
-    console.error("[admin-actions] falha inesperada:", error);
-    return fail("Não foi possível concluir a operação. Tente novamente.");
-  }
-}
-
-const PRODUCT_SELECT = `${ADMIN_PRODUCT_COLUMNS.join(",")}, category:categories(name)`;
-type ProductWithCategory = ProductRow & { category: { name: string } | null };
+const PRODUCT_SELECT = `${ADMIN_PRODUCT_COLUMNS.join(",")}, category:categories(name, product_type)`;
+type ProductWithCategory = ProductRow & { category: { name: string; product_type: string } | null };
 
 async function fetchAdminProduct(supabase: SupabaseClient, id: string): Promise<AdminProduct | null> {
   const { data, error } = await supabase
@@ -97,7 +66,11 @@ async function fetchAdminProduct(supabase: SupabaseClient, id: string): Promise<
     .maybeSingle<ProductWithCategory>();
   if (error) throw new Error(error.message);
   if (!data) return null;
-  return toAdminProduct(data, data.category?.name ?? "Sem categoria", getProductImagesPublicPrefix());
+  const category = {
+    name: data.category?.name ?? "Sem categoria",
+    productType: parseProductType(data.category?.product_type),
+  };
+  return toAdminProduct(data, category, getProductImagesPublicPrefix());
 }
 
 /** Caminho do objeto dentro do bucket, se a URL for uma imagem enviada pelo painel. */
@@ -278,9 +251,10 @@ async function nextCategorySortOrder(supabase: SupabaseClient): Promise<number> 
   return (data?.sort_order ?? -1) + 1;
 }
 
-export async function createCategoryAction(name: unknown): Promise<ActionResult<AdminCategory>> {
+export async function createCategoryAction(name: unknown, productType?: unknown): Promise<ActionResult<AdminCategory>> {
   const trimmed = readCategoryName(name);
   if (!trimmed) return fail("Informe um nome de categoria válido (até 60 caracteres).");
+  const type: ProductType = isProductType(productType) ? productType : "generic";
 
   return withAdmin(async (supabase) => {
     const sortOrder = await nextCategorySortOrder(supabase);
@@ -289,7 +263,7 @@ export async function createCategoryAction(name: unknown): Promise<ActionResult<
     for (let attempt = 0; attempt < 4; attempt += 1) {
       const { data, error } = await supabase
         .from("categories")
-        .insert({ name: trimmed, slug: slugCandidate(baseSlug, attempt), sort_order: sortOrder })
+        .insert({ name: trimmed, slug: slugCandidate(baseSlug, attempt), sort_order: sortOrder, product_type: type })
         .select(CATEGORY_COLUMNS.join(","))
         .single<CategoryRow>();
       if (!error) return done(toAdminCategory(data));
@@ -300,6 +274,27 @@ export async function createCategoryAction(name: unknown): Promise<ActionResult<
       // Colisão de slug (nomes diferentes que normalizam igual): tenta o próximo candidato.
     }
     return fail("Não foi possível criar a categoria.");
+  });
+}
+
+/** Reclassifica o tipo de produto da categoria (ver lib/store/productType.ts). */
+export async function setCategoryProductTypeAction(
+  id: string,
+  productType: unknown,
+): Promise<ActionResult<AdminCategory>> {
+  if (!isUuid(id)) return fail("Identificador de categoria inválido.");
+  if (!isProductType(productType)) return fail("Tipo de produto inválido.");
+
+  return withAdmin(async (supabase) => {
+    const { data, error } = await supabase
+      .from("categories")
+      .update({ product_type: productType })
+      .eq("id", id)
+      .select(CATEGORY_COLUMNS.join(","))
+      .maybeSingle<CategoryRow>();
+    if (error) return fail(describeDbError(error));
+    if (!data) return fail("Categoria não encontrada.");
+    return done(toAdminCategory(data));
   });
 }
 
