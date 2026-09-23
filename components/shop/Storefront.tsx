@@ -2,9 +2,10 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CartDrawer } from "@/components/cart/CartDrawer";
 import { useCart } from "@/components/cart/CartProvider";
+import { ProductQuickView } from "@/components/shop/ProductQuickView";
 import { formatStorePrice, type StoreProduct } from "@/lib/storeCatalog";
 import { defaultVariant, isProductSoldOut, productRequiresVariant, type CartVariant } from "@/lib/store/cart";
 import { attributesForType } from "@/lib/store/productType";
@@ -40,8 +41,7 @@ export function Storefront({ products: catalog, categories, hero, whatsapp, embe
   const [sortMode, setSortMode] = useState<SortMode>("featured");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [quickView, setQuickView] = useState<StoreProduct | null>(null);
-  const [quickSize, setQuickSize] = useState("");
-  const [quickColor, setQuickColor] = useState("");
+  const quickViewTriggerRef = useRef<HTMLElement | null>(null);
   const [selectedBrands, setSelectedBrands] = useState<string[]>([]);
   const [selectedSizes, setSelectedSizes] = useState<string[]>([]);
   const [selectedColor, setSelectedColor] = useState("");
@@ -51,6 +51,17 @@ export function Storefront({ products: catalog, categories, hero, whatsapp, embe
   // Estado do drawer é compartilhado (ver CartProvider): o header da home precisa abrir o mesmo
   // drawer que o botão de sacola aqui dentro.
   const { count: cartCount, addItem, isOpen: cartOpen, openCart, closeCart } = useCart();
+
+  const closeQuickView = useCallback(() => {
+    setQuickView(null);
+    window.requestAnimationFrame(() => quickViewTriggerRef.current?.focus());
+  }, []);
+
+  function openQuickView(product: StoreProduct) {
+    quickViewTriggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    closeCart();
+    setQuickView(product);
+  }
 
   const brands = useMemo(
     () => Array.from(new Set(catalog.map((product) => product.brand))).sort(),
@@ -94,7 +105,6 @@ export function Storefront({ products: catalog, categories, hero, whatsapp, embe
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         closeCart();
-        setQuickView(null);
       }
     };
     window.addEventListener("keydown", closeOnEscape);
@@ -196,30 +206,17 @@ export function Storefront({ products: catalog, categories, hero, whatsapp, embe
   function handleAddToBagClick(product: StoreProduct) {
     if (isProductSoldOut(product)) return;
     if (productRequiresVariant(product)) {
-      setQuickSize("");
-      setQuickColor("");
-      setQuickView(product);
+      openQuickView(product);
       return;
     }
     const result = addItem({ product, variant: defaultVariant(product), quantity: 1 });
     showFeedback(feedbackForResult(product.name, result));
   }
 
-  function confirmAddFromQuickView() {
-    if (!quickView) return;
-    const attrs = attributesForType(quickView.productType);
-    const needsSize = attrs.sizes && quickView.sizes.length > 1;
-    const needsColor = attrs.colors && quickView.colors.length > 1;
-    if ((needsSize && !quickSize) || (needsColor && !quickColor)) return;
-
-    const fallback = defaultVariant(quickView);
-    const variant: CartVariant = {
-      size: needsSize ? quickSize : fallback.size,
-      color: needsColor ? quickColor : fallback.color,
-    };
-    const result = addItem({ product: quickView, variant, quantity: 1 });
-    showFeedback(feedbackForResult(quickView.name, result));
-    if (result.ok) setQuickView(null);
+  function addFromQuickView(product: StoreProduct, variant: CartVariant, quantity: number) {
+    const result = addItem({ product, variant, quantity });
+    showFeedback(feedbackForResult(product.name, result));
+    return result;
   }
 
   const Wrapper = embedded ? "div" : "main";
@@ -478,6 +475,7 @@ export function Storefront({ products: catalog, categories, hero, whatsapp, embe
                       toggleListValue(productId, favorites, setFavorites)
                     }
                     onAddToBag={handleAddToBagClick}
+                    onOpenQuickView={openQuickView}
                     highlighted
                   />
                 )}
@@ -491,6 +489,7 @@ export function Storefront({ products: catalog, categories, hero, whatsapp, embe
                       toggleListValue(productId, favorites, setFavorites)
                     }
                     onAddToBag={handleAddToBagClick}
+                    onOpenQuickView={openQuickView}
                   />
                 ))}
               </div>
@@ -504,6 +503,7 @@ export function Storefront({ products: catalog, categories, hero, whatsapp, embe
                     favorite={favorites.includes(product.id)}
                     onFavorite={() => toggleListValue(product.id, favorites, setFavorites)}
                     onAddToBag={() => handleAddToBagClick(product)}
+                    onOpenQuickView={() => openQuickView(product)}
                   />
                 ))}
               </div>
@@ -542,107 +542,20 @@ export function Storefront({ products: catalog, categories, hero, whatsapp, embe
         </footer>
       )}
 
-      {quickView && (() => {
-        const quickViewAttrs = attributesForType(quickView.productType);
-        return (
-        <div className="fixed inset-0 z-[90] flex items-end justify-center bg-black/75 backdrop-blur-sm md:items-center" role="dialog" aria-modal="true" aria-label={`Detalhes de ${quickView.name}`}>
-          <button className="absolute inset-0 cursor-default" onClick={() => setQuickView(null)} aria-label="Fechar detalhes" />
-          <div className="store-drawer-enter relative z-10 grid max-h-[92svh] w-full max-w-5xl overflow-y-auto border border-white/10 bg-[#080808] md:grid-cols-[1.05fr_.95fr]">
-            <div className="relative min-h-[42svh] bg-[#0c0c0c] md:min-h-[640px]">
-              <Image
-                src={quickView.image}
-                alt={quickView.name}
-                fill
-                sizes="(min-width: 768px) 50vw, 100vw"
-                className={quickView.imageFit === "contain" ? "object-contain p-[10%]" : "object-cover"}
-                style={{ objectPosition: quickView.imagePosition ?? "50% 45%" }}
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/35 to-transparent" />
-            </div>
-            <div className="relative flex flex-col justify-center p-7 md:p-12">
-              <button type="button" onClick={() => setQuickView(null)} className="absolute right-5 top-5 p-2 text-ink-muted transition-colors hover:text-ink" aria-label="Fechar">
-                <CloseIcon className="h-5 w-5" />
-              </button>
-              <p className="eyebrow">{quickView.brand} · {quickView.category}</p>
-              <h2 className="mt-4 font-display text-[clamp(2.6rem,5vw,4.8rem)] leading-[0.94] tracking-[-0.045em]">
-                {quickView.name}
-              </h2>
-              <p className="mt-5 flex items-baseline gap-3 text-xl text-champagne">
-                {formatStorePrice(quickView.price)}
-                {quickViewAttrs.volume && quickView.volumeMl && (
-                  <span className="text-sm tracking-[0.12em] text-ink-faint uppercase">{quickView.volumeMl}ml</span>
-                )}
-              </p>
-              <p className="mt-6 max-w-md text-sm leading-relaxed text-ink-muted">{quickView.description}</p>
-
-              {quickViewAttrs.colors && quickView.colors.length > 1 ? (
-                <div className="mt-8">
-                  <p className="text-[9px] tracking-[0.3em] text-ink-faint uppercase">Selecione a cor</p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {quickView.colors.map((color) => (
-                      <button
-                        key={color.name}
-                        type="button"
-                        onClick={() => setQuickColor(color.name)}
-                        aria-pressed={quickColor === color.name}
-                        className={`flex items-center gap-2 border px-3 py-2 text-[10px] transition-colors ${quickColor === color.name ? "border-gold bg-gold/10 text-gold" : "border-white/15 text-ink-muted hover:border-white/40"}`}
-                      >
-                        <span className="h-3.5 w-3.5 rounded-full border border-white/20" style={{ backgroundColor: color.hex }} />
-                        {color.name}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ) : quickViewAttrs.colors && quickView.colors.length === 1 ? (
-                <div className="mt-8">
-                  <p className="text-[9px] tracking-[0.3em] text-ink-faint uppercase">Cor</p>
-                  <p className="mt-3 flex items-center gap-2 text-[10px] text-ink-muted">
-                    <span className="h-4 w-4 rounded-full border border-white/20" style={{ backgroundColor: quickView.colors[0].hex }} />
-                    {quickView.colors[0].name}
-                  </p>
-                </div>
-              ) : null}
-
-              {quickViewAttrs.sizes && quickView.sizes.length > 1 && (
-                <div className="mt-8">
-                  <p className="text-[9px] tracking-[0.3em] text-ink-faint uppercase">Selecione {quickViewAttrs.sizeLabel === "Numeração" ? "a numeração" : "o tamanho"}</p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {quickView.sizes.map((size) => (
-                      <button key={size} type="button" onClick={() => setQuickSize(size)} aria-pressed={quickSize === size} className={`min-w-11 border px-3 py-2.5 text-[10px] ${quickSize === size ? "border-gold bg-gold text-black" : "border-white/15 text-ink-muted hover:border-white/40"}`}>
-                        {size}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {(() => {
-                const soldOut = isProductSoldOut(quickView);
-                const missingSize = quickViewAttrs.sizes && quickView.sizes.length > 1 && !quickSize;
-                const missingColor = quickViewAttrs.colors && quickView.colors.length > 1 && !quickColor;
-                const label = soldOut
-                  ? "Produto esgotado"
-                  : missingSize
-                    ? `Selecione ${quickViewAttrs.sizeLabel === "Numeração" ? "a numeração" : "um tamanho"}`
-                    : missingColor
-                      ? "Selecione uma cor"
-                      : "Adicionar à sacola";
-                return (
-                  <button
-                    type="button"
-                    disabled={soldOut || missingSize || missingColor}
-                    onClick={confirmAddFromQuickView}
-                    className="btn-xc btn-xc-gold mt-10 justify-center disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/5 disabled:text-ink-faint"
-                  >
-                    {label}
-                  </button>
-                );
-              })()}
-            </div>
-          </div>
-        </div>
-        );
-      })()}
+      {quickView && (
+        <ProductQuickView
+          key={quickView.id}
+          product={quickView}
+          favorite={favorites.includes(quickView.id)}
+          onFavorite={() => toggleListValue(quickView.id, favorites, setFavorites)}
+          onClose={closeQuickView}
+          onAdd={(variant, quantity) => addFromQuickView(quickView, variant, quantity)}
+          onViewCart={() => {
+            setQuickView(null);
+            openCart();
+          }}
+        />
+      )}
 
       <CartDrawer open={cartOpen} onClose={closeCart} whatsapp={whatsapp} />
 
@@ -663,6 +576,7 @@ function CategoryCarousel({
   favorites,
   onFavorite,
   onAddToBag,
+  onOpenQuickView,
   highlighted = false,
 }: {
   title: string;
@@ -671,6 +585,7 @@ function CategoryCarousel({
   favorites: string[];
   onFavorite: (productId: string) => void;
   onAddToBag: (product: StoreProduct) => void;
+  onOpenQuickView: (product: StoreProduct) => void;
   highlighted?: boolean;
 }) {
   const railRef = useRef<HTMLDivElement>(null);
@@ -780,6 +695,7 @@ function CategoryCarousel({
               favorite={favorites.includes(product.id)}
               onFavorite={() => onFavorite(product.id)}
               onAddToBag={() => onAddToBag(product)}
+              onOpenQuickView={() => onOpenQuickView(product)}
             />
           </div>
         ))}
@@ -794,12 +710,14 @@ function ProductCard({
   favorite,
   onFavorite,
   onAddToBag,
+  onOpenQuickView,
 }: {
   product: StoreProduct;
   index: number;
   favorite: boolean;
   onFavorite: () => void;
   onAddToBag: () => void;
+  onOpenQuickView: () => void;
 }) {
   const soldOut = isProductSoldOut(product);
   const effectiveBadge = soldOut ? "Esgotado" : product.badge;
@@ -807,11 +725,15 @@ function ProductCard({
   const attrs = attributesForType(product.productType);
   return (
     <article className="store-card-enter group min-w-0" style={{ animationDelay: `${Math.min(index, 7) * 70}ms` }}>
-      <div className="relative aspect-[3/4] overflow-hidden bg-[#0a0a0a]">
+      <div className="relative aspect-[3/4] cursor-pointer overflow-hidden bg-[#0a0a0a]" onClick={onOpenQuickView}>
         <Image
           src={product.image}
           alt={`${product.name} — ${product.brand}`}
           fill
+          onClick={(event) => {
+            event.stopPropagation();
+            onOpenQuickView();
+          }}
           sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 50vw"
           className={`${product.imageFit === "contain" ? "object-contain p-[12%]" : "object-cover"} transition-transform duration-[1100ms] [transition-timing-function:var(--ease-xavier)] group-hover:scale-[1.045]`}
           style={{ objectPosition: product.imagePosition ?? "50% 45%" }}
@@ -833,13 +755,13 @@ function ProductCard({
           </div>
         )}
 
-        <button type="button" onClick={onFavorite} className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-black/45 text-ink backdrop-blur-md transition-colors hover:text-gold md:right-4 md:top-4" aria-label={favorite ? `Remover ${product.name} dos favoritos` : `Favoritar ${product.name}`}>
+        <button type="button" onClick={(event) => { event.stopPropagation(); onFavorite(); }} className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-black/45 text-ink backdrop-blur-md transition-colors hover:text-gold md:right-4 md:top-4" aria-label={favorite ? `Remover ${product.name} dos favoritos` : `Favoritar ${product.name}`}>
           <HeartIcon className="h-4 w-4" filled={favorite} />
         </button>
 
         <button
           type="button"
-          onClick={onAddToBag}
+          onClick={(event) => { event.stopPropagation(); onAddToBag(); }}
           disabled={soldOut}
           className="absolute inset-x-3 bottom-3 translate-y-3 border border-white/20 bg-black/70 py-3 text-[9px] tracking-[0.28em] text-ink uppercase opacity-0 backdrop-blur-md transition-all duration-500 group-hover:translate-y-0 group-hover:opacity-100 focus:translate-y-0 focus:opacity-100 disabled:cursor-not-allowed disabled:opacity-70 md:inset-x-4 md:bottom-4"
         >
@@ -851,7 +773,11 @@ function ProductCard({
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="text-[8px] tracking-[0.3em] text-gold uppercase md:text-[9px]">{product.brand}</p>
-            <h3 className="mt-1 truncate font-display text-[clamp(1.1rem,2vw,1.55rem)] leading-tight">{product.name}</h3>
+            <h3 className="mt-1 truncate font-display text-[clamp(1.1rem,2vw,1.55rem)] leading-tight">
+              <button type="button" onClick={onOpenQuickView} className="max-w-full truncate text-left transition-colors hover:text-gold focus-visible:text-gold focus-visible:outline-none" aria-label={`Ver detalhes de ${product.name}`}>
+                {product.name}
+              </button>
+            </h3>
             {attrs.volume && product.volumeMl && (
               <p className="mt-0.5 text-[9px] tracking-[0.16em] text-ink-faint uppercase">{product.volumeMl}ml</p>
             )}
@@ -919,10 +845,6 @@ function BagIcon({ className }: IconProps) {
 
 function HeartIcon({ className, filled = false }: IconProps & { filled?: boolean }) {
   return <svg viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.5" className={className} aria-hidden="true"><path d="M20.8 4.7a5.4 5.4 0 0 0-7.6 0L12 5.9l-1.2-1.2a5.4 5.4 0 0 0-7.6 7.6l1.2 1.2L12 21l7.6-7.5 1.2-1.2a5.4 5.4 0 0 0 0-7.6Z" /></svg>;
-}
-
-function CloseIcon({ className }: IconProps) {
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className={className} aria-hidden="true"><path d="m5 5 14 14M19 5 5 19" /></svg>;
 }
 
 function CarouselArrowIcon({ className }: IconProps) {

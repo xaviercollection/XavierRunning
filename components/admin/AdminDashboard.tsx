@@ -430,7 +430,7 @@ export function AdminDashboard({
 
         <div className="border-t border-white/[0.07] p-5">
           <p className="mb-4 truncate text-[10px] text-ink-faint" title={adminEmail}>{adminEmail}</p>
-          <Link href="/loja" className="flex items-center justify-between text-[10px] tracking-[0.18em] text-ink-muted uppercase transition-colors hover:text-gold">
+          <Link href="/" className="flex items-center justify-between text-[10px] tracking-[0.18em] text-ink-muted uppercase transition-colors hover:text-gold">
             Ver loja publicada
             <span aria-hidden="true">↗</span>
           </Link>
