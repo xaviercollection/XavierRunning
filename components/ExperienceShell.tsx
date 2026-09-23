@@ -87,11 +87,8 @@ function FloatingCartButton() {
         aria-hidden="true"
         fill
         sizes="80px"
-        className="object-contain p-2 transition-transform duration-300 group-hover:scale-105"
+        className="object-contain p-2.5 transition-transform duration-300 group-hover:scale-105"
       />
-      <span className="absolute inset-x-0 bottom-0 bg-black/75 py-1 text-[8px] tracking-[0.2em] text-champagne uppercase backdrop-blur-sm md:text-[9px]">
-        Carrinho
-      </span>
       {cartCount > 0 && (
         <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-gold px-1 text-[9px] font-medium text-black">
           {cartCount}
