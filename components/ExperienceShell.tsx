@@ -82,12 +82,12 @@ function FloatingCartButton() {
       className="group fixed bottom-5 right-5 z-40 h-16 w-16 overflow-hidden rounded-2xl border border-white/15 bg-[#f4efe3] shadow-[0_10px_30px_rgba(0,0,0,0.35)] transition-transform duration-300 hover:scale-105 focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-4 focus-visible:outline-gold md:bottom-7 md:right-7 md:h-20 md:w-20"
     >
       <Image
-        src="/images/cart/cart-owner-bags.webp"
+        src="/images/cart/cart-floating-bag.webp"
         alt=""
         aria-hidden="true"
         fill
         sizes="80px"
-        className="object-cover object-[50%_28%] transition-transform duration-300 group-hover:scale-105"
+        className="object-contain p-2 transition-transform duration-300 group-hover:scale-105"
       />
       <span className="absolute inset-x-0 bottom-0 bg-black/75 py-1 text-[8px] tracking-[0.2em] text-champagne uppercase backdrop-blur-sm md:text-[9px]">
         Carrinho

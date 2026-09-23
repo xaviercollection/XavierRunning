@@ -62,10 +62,10 @@ export function CartDrawer({ open, onClose, whatsapp }: CartDrawerProps) {
           </div>
           {items.length > 0 && (
             <Image
-              src="/images/cart/cart-filled-owner.webp"
+              src="/images/cart/cart-bag-only.webp"
               alt=""
-              width={1233}
-              height={1275}
+              width={1402}
+              height={1122}
               sizes="80px"
               className="pointer-events-none ml-auto h-20 w-20 shrink-0 object-contain"
             />
