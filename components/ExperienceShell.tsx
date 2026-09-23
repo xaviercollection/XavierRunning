@@ -79,18 +79,23 @@ function FloatingCartButton() {
       type="button"
       onClick={openCart}
       aria-label={cartCount > 0 ? `Abrir sacola com ${cartCount} itens` : "Abrir sacola"}
-      className="group fixed bottom-5 right-5 z-40 h-16 w-16 overflow-hidden rounded-2xl border border-white/15 bg-black/55 shadow-[0_10px_30px_rgba(0,0,0,0.45)] backdrop-blur-md transition-[transform,border-color,background-color] duration-300 hover:scale-105 hover:border-gold/60 hover:bg-black/70 focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-4 focus-visible:outline-gold md:bottom-7 md:right-7 md:h-20 md:w-20"
+      className="group fixed bottom-5 right-5 z-40 h-16 w-16 focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-4 focus-visible:outline-gold md:bottom-7 md:right-7 md:h-20 md:w-20"
     >
-      <Image
-        src="/images/cart/cart-floating-bag.webp"
-        alt=""
-        aria-hidden="true"
-        fill
-        sizes="80px"
-        className="object-contain p-2.5 transition-transform duration-300 group-hover:scale-105"
-      />
+      {/* O card visual (fundo, borda, recorte da imagem) fica num wrapper à parte: o
+          overflow-hidden dele não pode recortar o selo de quantidade, que precisa
+          "vazar" para fora do quadrado como um badge de notificação de app. */}
+      <span className="relative block h-full w-full overflow-hidden rounded-2xl border border-white/15 bg-black/55 shadow-[0_10px_30px_rgba(0,0,0,0.45)] backdrop-blur-md transition-[transform,border-color,background-color] duration-300 group-hover:scale-105 group-hover:border-gold/60 group-hover:bg-black/70">
+        <Image
+          src="/images/cart/cart-floating-bag.webp"
+          alt=""
+          aria-hidden="true"
+          fill
+          sizes="80px"
+          className="object-contain p-2.5 transition-transform duration-300 group-hover:scale-105"
+        />
+      </span>
       {cartCount > 0 && (
-        <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-gold px-1 text-[9px] font-medium text-black">
+        <span className="absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-gold px-1 text-[9px] font-medium text-black ring-2 ring-[#080808]">
           {cartCount}
         </span>
       )}
