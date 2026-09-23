@@ -271,7 +271,7 @@ export function HeroSection({ onReady, onLoadProgress }: HeroSectionProps) {
           sizes="100vw"
           onLoad={handleImageLoad}
           className="scale-[1.025] object-cover object-[58%_38%] md:object-[55%_40%]"
-          style={{ filter: "blur(2px) brightness(0.56) saturate(0.72) contrast(1.04)" }}
+          style={{ filter: "brightness(0.56) saturate(0.72) contrast(1.04)" }}
         />
 
         {/* LAYER 2 — cinematic overlay: a soft diagonal for depth plus a
