@@ -259,18 +259,18 @@ export function HeroSection({ onReady, onLoadProgress }: HeroSectionProps) {
   return (
     <section ref={heroRef} id="top" className="relative h-[108svh] min-h-[620px] w-full md:h-[116svh]">
       <div className="sticky top-0 h-[100dvh] min-h-[620px] w-full overflow-hidden">
-        {/* LAYER 1 — a fotografia real da loja ancora a abertura na Xavier.
-            O recorte preserva a parede com a marca no desktop e mantém o
+        {/* LAYER 1 — a ilustração da fachada ancora a abertura na Xavier.
+            O recorte preserva a fachada com a marca no desktop e mantém o
             ambiente reconhecível no celular. */}
         <Image
-          src="/images/store/xavier-hero-store.webp"
+          src="/images/store/xavier-hero-illustration.webp"
           alt=""
           aria-hidden="true"
           fill
           priority
           sizes="100vw"
           onLoad={handleImageLoad}
-          className="scale-[1.025] object-cover object-[66%_40%] md:object-[67%_41%]"
+          className="scale-[1.025] object-cover object-[58%_38%] md:object-[55%_40%]"
           style={{ filter: "blur(2px) brightness(0.56) saturate(0.72) contrast(1.04)" }}
         />
 
