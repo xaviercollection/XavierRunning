@@ -26,14 +26,19 @@ export interface StorefrontProps {
   hero: { eyebrow: string; title: string; description: string; imageSrc: string };
   /** WhatsApp configurado no painel. Vazio/inválido => número padrão da loja. */
   whatsapp: string;
+  /**
+   * true quando embutido em outra página (ex.: a home) que já tem seu próprio header/hero/rodapé.
+   * Nesse caso a vitrine renderiza só o catálogo em si (categorias, filtros, grade de produtos,
+   * modal de variação e sacola) — sem duplicar header/hero/footer/grão de fundo.
+   */
+  embedded?: boolean;
 }
 
-export function Storefront({ products: catalog, categories, hero, whatsapp }: StorefrontProps) {
+export function Storefront({ products: catalog, categories, hero, whatsapp, embedded = false }: StorefrontProps) {
   const [query, setQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState("Todos");
   const [sortMode, setSortMode] = useState<SortMode>("featured");
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [cartOpen, setCartOpen] = useState(false);
   const [quickView, setQuickView] = useState<StoreProduct | null>(null);
   const [quickSize, setQuickSize] = useState("");
   const [quickColor, setQuickColor] = useState("");
@@ -43,7 +48,9 @@ export function Storefront({ products: catalog, categories, hero, whatsapp }: St
   const [priceLimit, setPriceLimit] = useState<number | null>(null);
   const [favorites, setFavorites] = useState<string[]>([]);
   const [feedback, setFeedback] = useState("");
-  const { count: cartCount, addItem } = useCart();
+  // Estado do drawer é compartilhado (ver CartProvider): o header da home precisa abrir o mesmo
+  // drawer que o botão de sacola aqui dentro.
+  const { count: cartCount, addItem, isOpen: cartOpen, openCart, closeCart } = useCart();
 
   const brands = useMemo(
     () => Array.from(new Set(catalog.map((product) => product.brand))).sort(),
@@ -86,13 +93,13 @@ export function Storefront({ products: catalog, categories, hero, whatsapp }: St
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        setCartOpen(false);
+        closeCart();
         setQuickView(null);
       }
     };
     window.addEventListener("keydown", closeOnEscape);
     return () => window.removeEventListener("keydown", closeOnEscape);
-  }, []);
+  }, [closeCart]);
 
   const products = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase("pt-BR");
@@ -215,101 +222,109 @@ export function Storefront({ products: catalog, categories, hero, whatsapp }: St
     if (result.ok) setQuickView(null);
   }
 
+  const Wrapper = embedded ? "div" : "main";
+
   return (
-    <main className="min-h-screen bg-void text-ink">
-      <div aria-hidden="true" className="grain-fixed" />
+    <Wrapper className={embedded ? "bg-void text-ink" : "min-h-screen bg-void text-ink"}>
+      {!embedded && <div aria-hidden="true" className="grain-fixed" />}
 
-      <header className="fixed inset-x-0 top-0 z-40 border-b border-white/[0.08] bg-black/75 backdrop-blur-xl">
-        <div className="mx-auto flex h-[72px] max-w-[1680px] items-center justify-between gap-5 px-[clamp(1.25rem,4vw,3.5rem)]">
-          <Link href="/" className="group flex shrink-0 items-baseline gap-3" aria-label="Voltar para Xavier Collection">
-            <span className="font-display text-sm text-gold md:text-base">X</span>
-            <span className="hidden font-display text-[12px] tracking-[0.3em] text-champagne uppercase transition-colors group-hover:text-gold sm:block md:text-[14px]">
-              Xavier Collection
-            </span>
-          </Link>
-
-          <label className="relative ml-auto hidden w-full max-w-sm md:block">
-            <span className="sr-only">Buscar produtos</span>
-            <SearchIcon className="pointer-events-none absolute left-0 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint" />
-            <input
-              type="search"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="BUSCAR NA COLEÇÃO"
-              className="h-10 w-full border-b border-white/10 bg-transparent pl-7 pr-3 text-[10px] tracking-[0.22em] text-ink outline-none placeholder:text-ink-faint focus:border-gold"
-            />
-          </label>
-
-          <button
-            type="button"
-            onClick={() => setFiltersOpen((open) => !open)}
-            className="relative flex h-10 items-center gap-2 text-[10px] tracking-[0.22em] text-ink-muted uppercase transition-colors hover:text-gold"
-            aria-expanded={filtersOpen}
-          >
-            <FilterIcon className="h-4 w-4" />
-            <span className="hidden sm:inline">Filtros</span>
-            {activeFilterCount > 0 && (
-              <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-gold px-1 text-[9px] text-black">
-                {activeFilterCount}
+      {!embedded && (
+        <header className="fixed inset-x-0 top-0 z-40 border-b border-white/[0.08] bg-black/75 backdrop-blur-xl">
+          <div className="mx-auto flex h-[72px] max-w-[1680px] items-center justify-between gap-5 px-[clamp(1.25rem,4vw,3.5rem)]">
+            <Link href="/" className="group flex shrink-0 items-baseline gap-3" aria-label="Voltar para Xavier Collection">
+              <span className="font-display text-sm text-gold md:text-base">X</span>
+              <span className="hidden font-display text-[12px] tracking-[0.3em] text-champagne uppercase transition-colors group-hover:text-gold sm:block md:text-[14px]">
+                Xavier Collection
               </span>
-            )}
-          </button>
+            </Link>
 
-          <button
-            type="button"
-            onClick={() => setCartOpen(true)}
-            className="relative flex h-10 w-10 items-center justify-center text-ink-muted transition-colors hover:text-gold"
-            aria-label={`Abrir sacola com ${cartCount} itens`}
-          >
-            <BagIcon className="h-[18px] w-[18px]" />
-            {cartCount > 0 && (
-              <span className="absolute right-0 top-0 flex h-5 min-w-5 items-center justify-center rounded-full bg-gold px-1 text-[9px] font-medium text-black">
-                {cartCount}
-              </span>
-            )}
-          </button>
-        </div>
-      </header>
+            <label className="relative ml-auto hidden w-full max-w-sm md:block">
+              <span className="sr-only">Buscar produtos</span>
+              <SearchIcon className="pointer-events-none absolute left-0 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint" />
+              <input
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="BUSCAR NA COLEÇÃO"
+                className="h-10 w-full border-b border-white/10 bg-transparent pl-7 pr-3 text-[10px] tracking-[0.22em] text-ink outline-none placeholder:text-ink-faint focus:border-gold"
+              />
+            </label>
 
-      <section className="relative flex min-h-[72svh] items-end overflow-hidden pb-[clamp(4rem,9vw,8rem)] pt-32">
-        <Image
-          src={hero.imageSrc}
-          alt="Interior da Xavier Collection com roupas selecionadas"
-          fill
-          loading="eager"
-          fetchPriority="high"
-          sizes="100vw"
-          className="object-cover object-[45%_48%]"
-        />
-        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(3,3,3,.76)_0%,rgba(3,3,3,.3)_52%,rgba(3,3,3,.1)_100%)]" />
-        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(3,3,3,.18)_0%,transparent_38%,rgba(3,3,3,.64)_100%)]" />
+            <button
+              type="button"
+              onClick={() => setFiltersOpen((open) => !open)}
+              className="relative flex h-10 items-center gap-2 text-[10px] tracking-[0.22em] text-ink-muted uppercase transition-colors hover:text-gold"
+              aria-expanded={filtersOpen}
+            >
+              <FilterIcon className="h-4 w-4" />
+              <span className="hidden sm:inline">Filtros</span>
+              {activeFilterCount > 0 && (
+                <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-gold px-1 text-[9px] text-black">
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
 
-        <div className="xc-container relative z-10">
-          {hero.eyebrow && <p className="eyebrow store-reveal">{hero.eyebrow}</p>}
-          <h1 className="store-reveal mt-5 max-w-4xl font-display text-[clamp(4rem,10vw,9rem)] leading-[0.82] tracking-[-0.055em] text-ink [animation-delay:100ms]">
-            {heroTitleFirstLine}
-            {heroTitleLastLine && (
-              <>
-                <br />
-                {heroTitleLastLine}
-              </>
-            )}
-          </h1>
-          <div className="store-reveal mt-8 flex max-w-2xl flex-col gap-5 sm:flex-row sm:items-end sm:justify-between [animation-delay:200ms]">
-            <p className="max-w-md text-sm leading-relaxed text-white/60">{hero.description}</p>
-            <a href="#produtos" className="link-xc shrink-0">
-              Ver coleção <span className="arrow">↓</span>
-            </a>
+            <button
+              type="button"
+              onClick={openCart}
+              className="relative flex h-10 w-10 items-center justify-center text-ink-muted transition-colors hover:text-gold"
+              aria-label={`Abrir sacola com ${cartCount} itens`}
+            >
+              <BagIcon className="h-[18px] w-[18px]" />
+              {cartCount > 0 && (
+                <span className="absolute right-0 top-0 flex h-5 min-w-5 items-center justify-center rounded-full bg-gold px-1 text-[9px] font-medium text-black">
+                  {cartCount}
+                </span>
+              )}
+            </button>
           </div>
-        </div>
+        </header>
+      )}
 
-        <span className="absolute bottom-7 right-[clamp(1.25rem,4vw,3.5rem)] z-10 hidden text-[9px] tracking-[0.35em] text-white/40 uppercase md:block">
-          Collection · 2026
-        </span>
-      </section>
+      {!embedded && (
+        <section className="relative flex min-h-[72svh] items-end overflow-hidden pb-[clamp(4rem,9vw,8rem)] pt-32">
+          <Image
+            src={hero.imageSrc}
+            alt="Interior da Xavier Collection com roupas selecionadas"
+            fill
+            loading="eager"
+            fetchPriority="high"
+            sizes="100vw"
+            className="object-cover object-[45%_48%]"
+          />
+          <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(3,3,3,.76)_0%,rgba(3,3,3,.3)_52%,rgba(3,3,3,.1)_100%)]" />
+          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(3,3,3,.18)_0%,transparent_38%,rgba(3,3,3,.64)_100%)]" />
+
+          <div className="xc-container relative z-10">
+            {hero.eyebrow && <p className="eyebrow store-reveal">{hero.eyebrow}</p>}
+            <h1 className="store-reveal mt-5 max-w-4xl font-display text-[clamp(4rem,10vw,9rem)] leading-[0.82] tracking-[-0.055em] text-ink [animation-delay:100ms]">
+              {heroTitleFirstLine}
+              {heroTitleLastLine && (
+                <>
+                  <br />
+                  {heroTitleLastLine}
+                </>
+              )}
+            </h1>
+            <div className="store-reveal mt-8 flex max-w-2xl flex-col gap-5 sm:flex-row sm:items-end sm:justify-between [animation-delay:200ms]">
+              <p className="max-w-md text-sm leading-relaxed text-white/60">{hero.description}</p>
+              <a href="#produtos" className="link-xc shrink-0">
+                Ver coleção <span className="arrow">↓</span>
+              </a>
+            </div>
+          </div>
+
+          <span className="absolute bottom-7 right-[clamp(1.25rem,4vw,3.5rem)] z-10 hidden text-[9px] tracking-[0.35em] text-white/40 uppercase md:block">
+            Collection · 2026
+          </span>
+        </section>
+      )}
 
       <section id="produtos" className="border-t border-white/[0.06]">
-        <div className="sticky top-[72px] z-30 border-b border-white/[0.07] bg-[#050505]/95 backdrop-blur-xl">
+        <div
+          className={`border-b border-white/[0.07] bg-[#050505]/95 backdrop-blur-xl ${embedded ? "" : "sticky top-[72px] z-30"}`}
+        >
           <nav
             aria-label="Categorias de produtos"
             className="mx-auto flex max-w-[1680px] gap-7 overflow-x-auto px-[clamp(1.25rem,4vw,3.5rem)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
@@ -505,25 +520,27 @@ export function Storefront({ products: catalog, categories, hero, whatsapp }: St
         </div>
       </section>
 
-      <footer className="relative overflow-hidden border-t border-white/[0.06] px-[clamp(1.25rem,4vw,3.5rem)] py-14 md:py-20">
-        <span className="pointer-events-none absolute inset-x-0 -bottom-8 text-center font-display text-[20vw] leading-none text-white/[0.02]">
-          Xavier
-        </span>
-        <div className="relative z-10 mx-auto flex max-w-[1680px] flex-col gap-10 md:flex-row md:items-end md:justify-between">
-          <div>
-            <Link href="/" className="font-display text-2xl tracking-[0.12em] uppercase">
-              Xavier Collection
-            </Link>
-            <p className="mt-4 max-w-sm text-sm leading-relaxed text-ink-muted">
-              Boutique masculina, perfumaria e acessórios escolhidos para marcar presença.
-            </p>
+      {!embedded && (
+        <footer className="relative overflow-hidden border-t border-white/[0.06] px-[clamp(1.25rem,4vw,3.5rem)] py-14 md:py-20">
+          <span className="pointer-events-none absolute inset-x-0 -bottom-8 text-center font-display text-[20vw] leading-none text-white/[0.02]">
+            Xavier
+          </span>
+          <div className="relative z-10 mx-auto flex max-w-[1680px] flex-col gap-10 md:flex-row md:items-end md:justify-between">
+            <div>
+              <Link href="/" className="font-display text-2xl tracking-[0.12em] uppercase">
+                Xavier Collection
+              </Link>
+              <p className="mt-4 max-w-sm text-sm leading-relaxed text-ink-muted">
+                Boutique masculina, perfumaria e acessórios escolhidos para marcar presença.
+              </p>
+            </div>
+            <div className="flex flex-col gap-4 text-[10px] tracking-[0.25em] text-ink-faint uppercase md:items-end">
+              <span>Frontend demonstrativo · Collection 2026</span>
+              <Link href="/" className="link-xc">Voltar à experiência</Link>
+            </div>
           </div>
-          <div className="flex flex-col gap-4 text-[10px] tracking-[0.25em] text-ink-faint uppercase md:items-end">
-            <span>Frontend demonstrativo · Collection 2026</span>
-            <Link href="/" className="link-xc">Voltar à experiência</Link>
-          </div>
-        </div>
-      </footer>
+        </footer>
+      )}
 
       {quickView && (() => {
         const quickViewAttrs = attributesForType(quickView.productType);
@@ -627,7 +644,7 @@ export function Storefront({ products: catalog, categories, hero, whatsapp }: St
         );
       })()}
 
-      <CartDrawer open={cartOpen} onClose={() => setCartOpen(false)} whatsapp={whatsapp} />
+      <CartDrawer open={cartOpen} onClose={closeCart} whatsapp={whatsapp} />
 
       <div
         role="status"
@@ -635,7 +652,7 @@ export function Storefront({ products: catalog, categories, hero, whatsapp }: St
       >
         {feedback}
       </div>
-    </main>
+    </Wrapper>
   );
 }
 

@@ -1,8 +1,6 @@
-const EXPLORE_LINKS = [
-  { label: "Novidades", href: "#colecao-roupas" },
-  { label: "Masculino", href: "#colecao-roupas" },
-  { label: "Perfumes", href: "#fragrancias" },
-];
+// A home mostra só Hero + catálogo (ver components/ExperienceShell.tsx): o único anchor de
+// navegação que ainda existe na página é #produtos.
+const EXPLORE_LINKS = [{ label: "Catálogo", href: "#produtos" }];
 
 const CONTACT_SLOTS = [
   { label: "Instagram" },

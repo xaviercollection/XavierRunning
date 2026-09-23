@@ -3,10 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useCart } from "@/components/cart/CartProvider";
 
+// A home mostra só Hero + catálogo (ver components/ExperienceShell.tsx): os únicos anchors
+// que continuam existindo na página são #produtos (catálogo) e #contato (rodapé).
 const NAV_LINKS = [
-  { label: "Novidades", href: "#colecao-roupas" },
-  { label: "Masculino", href: "#colecao-roupas" },
-  { label: "Perfumes", href: "#fragrancias" },
+  { label: "Catálogo", href: "#produtos" },
   { label: "Contato", href: "#contato" },
 ];
 
@@ -14,7 +14,7 @@ export function SiteHeader() {
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const tickingRef = useRef(false);
-  const { count: cartCount } = useCart();
+  const { count: cartCount, openCart } = useCart();
 
   useEffect(() => {
     const onScroll = () => {
@@ -77,10 +77,11 @@ export function SiteHeader() {
         </a>
 
         <div className="flex items-center gap-6 lg:gap-9">
-          <a
-            href="/loja"
-            aria-label={cartCount > 0 ? `Abrir a loja — sacola com ${cartCount} itens` : "Explorar a loja"}
-            className="relative hidden h-9 w-9 items-center justify-center text-ink-muted transition-colors duration-300 hover:text-gold md:flex"
+          <button
+            type="button"
+            onClick={openCart}
+            aria-label={cartCount > 0 ? `Abrir sacola com ${cartCount} itens` : "Abrir sacola"}
+            className="relative flex h-9 w-9 items-center justify-center text-ink-muted transition-colors duration-300 hover:text-gold"
           >
             <BagIcon />
             {cartCount > 0 && (
@@ -88,7 +89,7 @@ export function SiteHeader() {
                 {cartCount}
               </span>
             )}
-          </a>
+          </button>
 
           <button
             type="button"

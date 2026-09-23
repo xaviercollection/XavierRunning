@@ -375,7 +375,7 @@ export function HeroSection({ onReady, onLoadProgress }: HeroSectionProps) {
 
           <a
             ref={ctaRef}
-            href="#fragrancias"
+            href="#produtos"
             className="group mt-6 flex items-center gap-3 border border-gold/40 px-7 py-3 text-xs tracking-[0.25em] text-[#e9dcb8] uppercase transition-colors duration-300 hover:border-gold hover:text-gold md:text-sm"
           >
             Explorar coleção

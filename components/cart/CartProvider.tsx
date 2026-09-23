@@ -9,7 +9,7 @@
 // — sem isso o React acusaria mismatch de hidratação sempre que já existisse algo salvo. Depois
 // de montado, o primeiro subscribe carrega o localStorage e notifica os assinantes.
 
-import { createContext, useCallback, useContext, useMemo, useSyncExternalStore } from "react";
+import { createContext, useCallback, useContext, useMemo, useState, useSyncExternalStore } from "react";
 import type { StoreProduct } from "@/lib/storeCatalog";
 import {
   cartCount,
@@ -104,6 +104,13 @@ interface CartContextValue {
   items: CartItem[];
   count: number;
   totalCents: number;
+  /**
+   * Estado do drawer (aberto/fechado) — compartilhado de propósito: tanto o header da home
+   * quanto o header da vitrine (embutida ou em /loja) precisam abrir o MESMO drawer.
+   */
+  isOpen: boolean;
+  openCart: () => void;
+  closeCart: () => void;
   addItem: (input: { product: StoreProduct; variant: CartVariant; quantity?: number }) => AddResult;
   removeItem: (key: string) => void;
   setQuantity: (key: string, quantity: number) => void;
@@ -116,6 +123,9 @@ const CartContext = createContext<CartContextValue | null>(null);
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const items = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  const [isOpen, setIsOpen] = useState(false);
+  const openCart = useCallback(() => setIsOpen(true), []);
+  const closeCart = useCallback(() => setIsOpen(false), []);
 
   const addItem = useCallback<CartContextValue["addItem"]>(({ product, variant, quantity = 1 }) => {
     if (isProductSoldOut(product)) return { ok: false, reason: "sold-out" };
@@ -182,6 +192,9 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       items,
       count: cartCount(items),
       totalCents: cartTotalCents(items),
+      isOpen,
+      openCart,
+      closeCart,
       addItem,
       removeItem,
       setQuantity,
@@ -189,7 +202,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       decrement,
       clear,
     }),
-    [items, addItem, removeItem, setQuantity, increment, decrement, clear],
+    [items, isOpen, openCart, closeCart, addItem, removeItem, setQuantity, increment, decrement, clear],
   );
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;

@@ -5,19 +5,20 @@ import { useCallback, useState, type ReactNode } from "react";
 import { LoaderScreen } from "@/components/loader/LoaderScreen";
 import { SiteHeader } from "@/components/header/SiteHeader";
 import { HeroSection } from "@/components/hero/HeroSection";
-import { PerfumeCoverflowCarousel } from "@/components/ui/perfume-coverflow-carousel";
 import { SeamBloom } from "@/components/ui/SeamBloom";
-import { ClothingCarousel } from "@/components/fashion/ClothingCarousel";
-import { StoreLocation } from "@/components/store/StoreLocation";
-import { carouselClothing } from "@/lib/clothingCatalog";
-import { carouselPerfumes } from "@/lib/perfumeCatalog";
+
+// Home simplificada: Hero -> catálogo real (Storefront embutido) -> footer, sem seções
+// editoriais entre os dois. Os componentes que costumavam ficar aqui (carrosséis de perfume/
+// roupa, StoreShowcase, StoreLocation) continuam no projeto — só pararam de ser renderizados
+// nesta página; nada foi apagado.
 
 interface ExperienceShellProps {
-  storeShowcase: ReactNode;
+  /** Catálogo real da loja (mesmo componente/dados de /loja), já embutido (sem header/hero/footer próprios). */
+  catalog: ReactNode;
   footer: ReactNode;
 }
 
-export function ExperienceShell({ storeShowcase, footer }: ExperienceShellProps) {
+export function ExperienceShell({ catalog, footer }: ExperienceShellProps) {
   const [heroReady, setHeroReady] = useState(false);
   const [loaderMounted, setLoaderMounted] = useState(true);
   const [loadProgress, setLoadProgress] = useState(0);
@@ -57,22 +58,8 @@ export function ExperienceShell({ storeShowcase, footer }: ExperienceShellProps)
 
           <SeamBloom />
 
-          <PerfumeCoverflowCarousel id="fragrancias" perfumes={carouselPerfumes} />
-
-          <SeamBloom />
-
-          <ClothingCarousel id="colecao-roupas" items={carouselClothing} />
-
-          <SeamBloom />
-
-          {storeShowcase}
-
-          <SeamBloom />
-
-          <StoreLocation />
+          {catalog}
         </main>
-
-        <SeamBloom />
 
         {footer}
       </div>
@@ -85,8 +72,8 @@ export function ExperienceShell({ storeShowcase, footer }: ExperienceShellProps)
 function FloatingShopButton() {
   return (
     <Link
-      href="/loja#produtos"
-      aria-label="Ir para a loja"
+      href="#produtos"
+      aria-label="Ir para o catálogo"
       className="group fixed bottom-5 right-5 z-40 flex h-11 w-11 items-center justify-center rounded-full border border-white/15 bg-black/55 text-champagne shadow-[0_10px_30px_rgba(0,0,0,0.28)] backdrop-blur-md transition-[transform,border-color,color,background-color] duration-300 hover:scale-105 hover:border-gold/60 hover:bg-black/75 hover:text-gold focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-4 focus-visible:outline-gold md:bottom-7 md:right-7"
     >
       <svg viewBox="0 0 24 24" width={17} height={17} fill="none" stroke="currentColor" strokeWidth={1.35} aria-hidden="true" className="transition-transform duration-300 group-hover:-translate-y-px">
