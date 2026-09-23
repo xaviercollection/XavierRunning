@@ -55,20 +55,37 @@ export function CartDrawer({ open, onClose, whatsapp }: CartDrawerProps) {
         className={`absolute right-0 top-0 flex h-full w-full max-w-md flex-col border-l border-white/10 bg-[#080808] transition-transform duration-700 [transition-timing-function:var(--ease-xavier)] ${open ? "translate-x-0" : "translate-x-full"}`}
         aria-label="Sacola de compras"
       >
-        <div className="flex items-center justify-between border-b border-white/10 px-6 py-6">
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/10 px-6 py-6">
           <div>
             <p className="eyebrow">Sua seleção</p>
             <h2 className="mt-2 font-display text-3xl">Sacola ({count})</h2>
           </div>
+          {items.length > 0 && (
+            <Image
+              src="/images/cart/cart-filled-owner.webp"
+              alt=""
+              width={1233}
+              height={1275}
+              sizes="80px"
+              className="pointer-events-none ml-auto h-20 w-20 shrink-0 object-contain"
+            />
+          )}
           <button type="button" onClick={onClose} className="p-2 text-ink-muted hover:text-ink" aria-label="Fechar sacola">
             <CloseIcon className="h-5 w-5" />
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-6 py-6">
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
           {items.length === 0 ? (
-            <div className="flex h-full flex-col items-center justify-center text-center">
-              <BagIcon className="h-9 w-9 text-gold/50" />
+            <div className="flex min-h-full flex-col items-center justify-center text-center">
+              <Image
+                src="/images/cart/cart-empty-owner.webp"
+                alt="Dono da Xavier Collection sentado, ajustando os óculos"
+                width={1145}
+                height={1374}
+                sizes="240px"
+                className="pointer-events-none h-[clamp(120px,30dvh,280px)] w-auto max-w-full shrink-0 object-contain"
+              />
               <p className="mt-5 font-display text-2xl">Sua sacola está vazia.</p>
               <p className="mt-2 max-w-xs text-sm text-ink-muted">
                 Explore a coleção e escolha as peças que combinam com sua presença.
@@ -155,7 +172,7 @@ export function CartDrawer({ open, onClose, whatsapp }: CartDrawerProps) {
         </div>
 
         {items.length > 0 && (
-          <div className="border-t border-white/10 p-6">
+          <div className="shrink-0 border-t border-white/10 p-6">
             <div className="flex items-end justify-between">
               <span className="text-[10px] tracking-[0.25em] text-ink-muted uppercase">Total estimado</span>
               <span className="font-display text-3xl text-champagne">{formatStorePrice(total)}</span>
@@ -184,15 +201,6 @@ function CloseIcon({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className={className} aria-hidden="true">
       <path d="m5 5 14 14M19 5 5 19" />
-    </svg>
-  );
-}
-
-function BagIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" className={className} aria-hidden="true">
-      <path d="M6 8h12l-1 12H7L6 8Z" />
-      <path d="M9 8V6a3 3 0 0 1 6 0v2" />
     </svg>
   );
 }
