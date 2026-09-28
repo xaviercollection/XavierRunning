@@ -259,18 +259,18 @@ export function HeroSection({ onReady, onLoadProgress }: HeroSectionProps) {
   return (
     <section ref={heroRef} id="top" className="relative h-[108svh] min-h-[620px] w-full md:h-[116svh]">
       <div className="sticky top-0 h-[100dvh] min-h-[620px] w-full overflow-hidden">
-        {/* LAYER 1 — a ilustração da fachada ancora a abertura na Xavier.
-            O recorte preserva a fachada com a marca no desktop e mantém o
-            ambiente reconhecível no celular. */}
+        {/* LAYER 1 — a foto de campanha (modelo Crosby + perfumes) ancora a abertura na Xavier.
+            O recorte mantém o modelo em quadro no celular e a cena inteira
+            no desktop. */}
         <Image
-          src="/images/store/xavier-hero-illustration.webp"
+          src="/images/store/xavier-hero-campaign.jpg"
           alt=""
           aria-hidden="true"
           fill
           priority
           sizes="100vw"
           onLoad={handleImageLoad}
-          className="scale-[1.025] object-cover object-[58%_38%] md:object-[55%_40%]"
+          className="scale-[1.025] object-cover object-[36%_40%] md:object-[50%_45%]"
           style={{ filter: "brightness(0.56) saturate(0.72) contrast(1.04)" }}
         />
 
