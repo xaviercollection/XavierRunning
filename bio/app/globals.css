@@ -1,0 +1,433 @@
+/* Xavier Collection — bio. Mesmos tokens da loja (app/globals.css da raiz), sem Tailwind:
+   a página é uma tela só e CSS puro mantém o peso mínimo. */
+
+:root {
+  --void: #050505;
+  --ink: #f4f1ea;
+  --ink-muted: #a5a5a5;
+  --gold: #c8a45d;
+  --line: rgba(244, 241, 234, 0.16);
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  --font-display: var(--font-bodoni), "Bodoni 72", "Didot", Georgia, serif;
+  --font-sans: var(--font-archivo), "Helvetica Neue", Arial, sans-serif;
+
+  color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--void);
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--void);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1,
+p,
+ul {
+  margin: 0;
+}
+
+::selection {
+  background: var(--gold);
+  color: var(--void);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---------- Composição ----------
+   Celular: coluna única que cabe inteira em 100svh. Marca no topo, declaração e botões ancorados
+   embaixo, perto do polegar. Os espaçamentos encolhem com a altura (svh) antes de exigir rolagem. */
+
+.bio {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  min-height: 100svh;
+  max-width: 1680px;
+  margin-inline: auto;
+  padding: clamp(1.25rem, 4svh, 2.75rem) clamp(1.25rem, 6vw, 4.5rem) clamp(1rem, 3svh, 2.25rem);
+  overflow: hidden;
+  overflow: clip;
+}
+
+/* X gigante ao fundo, como a assinatura de contracapa do rodapé da loja. Estático. */
+.bio-watermark {
+  position: absolute;
+  z-index: -1;
+  top: 50%;
+  right: -38vw;
+  height: 92svh;
+  width: auto;
+  aspect-ratio: 98 / 124;
+  transform: translateY(-46%);
+  color: var(--ink);
+  opacity: 0.035;
+  pointer-events: none;
+}
+
+.bio-mark {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.bio-monogram {
+  display: block;
+  height: clamp(3rem, 10svh, 5.5rem);
+  width: auto;
+  aspect-ratio: 98 / 124;
+  color: var(--ink);
+}
+
+.bio-rule {
+  display: block;
+  width: 2.5rem;
+  height: 1px;
+  margin-block: clamp(0.85rem, 2.4svh, 1.5rem);
+  background: var(--gold);
+  transform-origin: left;
+}
+
+.bio-brand {
+  font-family: var(--font-display);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: 0.34em;
+  text-transform: uppercase;
+}
+
+.bio-main {
+  width: 100%;
+  max-width: 34rem;
+  margin-top: auto;
+  padding-top: clamp(1.5rem, 6svh, 4.5rem);
+}
+
+.bio-slogan {
+  font-family: var(--font-display);
+  font-size: clamp(2.25rem, min(13vw, 7.4svh), 4.75rem);
+  font-weight: 400;
+  line-height: 0.92;
+  letter-spacing: -0.005em;
+  text-transform: uppercase;
+}
+
+/* Cada linha é uma máscara; o respiro inferior evita cortar a cedilha de "PRESENÇA". */
+.bio-line {
+  display: block;
+  overflow: hidden;
+  padding-bottom: 0.14em;
+  margin-bottom: -0.14em;
+}
+
+.bio-line > span {
+  display: block;
+}
+
+.bio-support {
+  max-width: 34ch;
+  margin-top: clamp(0.85rem, 2.2svh, 1.4rem);
+  font-size: 0.75rem;
+  line-height: 1.6;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  text-wrap: balance;
+}
+
+/* ---------- Botões ----------
+   Não são cards nem pílulas: um bloco sólido para a loja e linhas editoriais com fio para o resto. */
+
+.bio-actions {
+  margin-top: clamp(1.5rem, 4.6svh, 3rem);
+}
+
+.bio-actions ul {
+  padding: 0;
+  list-style: none;
+}
+
+.action {
+  position: relative;
+  display: grid;
+  grid-template-columns: 2.5rem 1fr auto;
+  align-items: center;
+  min-height: clamp(3rem, 7.6svh, 3.75rem);
+  padding-inline: 1.1rem;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: color 0.4s var(--ease);
+}
+
+.action::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 -1px;
+  height: 1px;
+  background: var(--gold);
+  transform: scaleX(0);
+  transform-origin: right;
+  transition: transform 0.55s var(--ease);
+}
+
+.action-index {
+  font-size: 0.6875rem;
+  letter-spacing: 0.12em;
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+  transition: color 0.4s var(--ease);
+}
+
+.action-arrow {
+  width: 1rem;
+  height: 1rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.25;
+  stroke-linecap: square;
+  transition: transform 0.45s var(--ease);
+}
+
+.action-primary {
+  isolation: isolate;
+  background: var(--ink);
+  color: var(--void);
+  border-bottom-color: transparent;
+}
+
+.action-primary .action-index {
+  color: rgba(5, 5, 5, 0.62);
+}
+
+/* Na loja, o ouro entra como material: preenche o bloco da esquerda para a direita. */
+.action-primary::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 -1px;
+  z-index: -1;
+  background: var(--gold);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.6s var(--ease);
+}
+
+.action-primary::after {
+  display: none;
+}
+
+@media (hover: hover) {
+  .action:hover .action-index {
+    color: var(--gold);
+  }
+
+  .action:hover::after {
+    transform: scaleX(1);
+    transform-origin: left;
+  }
+
+  .action:hover .action-arrow {
+    transform: translateX(4px);
+  }
+
+  .action:hover .action-arrow-out {
+    transform: translate(3px, -3px);
+  }
+
+  .action-primary:hover .action-index {
+    color: rgba(5, 5, 5, 0.62);
+  }
+
+  .action-primary:hover::before {
+    transform: scaleX(1);
+  }
+}
+
+.action:active {
+  background-color: rgba(244, 241, 234, 0.06);
+}
+
+.action-primary:active {
+  background-color: var(--gold);
+}
+
+.action:focus-visible {
+  z-index: 1;
+  outline: 2px solid var(--gold);
+  outline-offset: 3px;
+}
+
+.bio-footer {
+  margin-top: clamp(1rem, 3.2svh, 2.25rem);
+  font-size: 0.6875rem;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+/* Telas muito baixas (celular deitado, navegador com barras abertas): aperta antes de rolar. */
+@media (max-height: 560px) and (max-width: 959px) {
+  .bio-main {
+    padding-top: 1.25rem;
+  }
+
+  .action {
+    min-height: 2.875rem;
+  }
+}
+
+/* ---------- Desktop: cartaz de campanha ----------
+   Declaração enorme à esquerda, botões alinhados à base à direita, X de fundo cortando a tela.
+   O celular deitado usa a mesma composição em duas colunas, que é a que cabe na altura dele. */
+
+@media (min-width: 960px), (orientation: landscape) and (min-width: 600px) and (max-height: 520px) {
+  .bio-watermark {
+    right: -6vw;
+    height: 128svh;
+    transform: translateY(-50%);
+  }
+
+  .bio-monogram {
+    height: clamp(2.75rem, 13svh, 7.5rem);
+  }
+
+  .bio-brand {
+    font-size: 0.9375rem;
+  }
+
+  .bio-main {
+    max-width: none;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) clamp(17rem, 34vw, 27rem);
+    align-items: end;
+    column-gap: clamp(3rem, 7vw, 9rem);
+  }
+
+  /* 15vw - 5rem acompanha a largura da coluna da esquerda: "PRESENÇA." nunca invade os botões. */
+  .bio-slogan {
+    font-size: clamp(2.75rem, min(15vw - 5rem, 17svh), 10rem);
+    line-height: 0.88;
+  }
+
+  .bio-support {
+    margin-top: clamp(1rem, 3svh, 2rem);
+    font-size: 0.8125rem;
+  }
+
+  .bio-actions {
+    margin-top: 0;
+  }
+
+  .action {
+    min-height: clamp(2.75rem, 8svh, 3.75rem);
+  }
+
+  .bio-footer {
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--line);
+  }
+}
+
+/* ---------- Movimento ----------
+   Uma única camada, só na chegada: o X é revelado de cima para baixo, o fio de ouro se estende,
+   a declaração sobe por trás da máscara e o restante aparece junto. Nada se move depois disso. */
+
+@media (prefers-reduced-motion: no-preference) {
+  .bio-monogram {
+    animation: bio-wipe 1.1s var(--ease) both;
+  }
+
+  .bio-rule {
+    animation: bio-extend 0.9s 0.45s var(--ease) both;
+  }
+
+  .bio-line > span {
+    animation: bio-rise 1s calc(0.2s + var(--i, 0) * 0.09s) var(--ease) both;
+  }
+
+  .bio-brand,
+  .bio-support,
+  .bio-actions,
+  .bio-footer {
+    animation: bio-fade 0.8s 0.5s var(--ease) both;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .action,
+  .action::before,
+  .action::after,
+  .action-index,
+  .action-arrow {
+    transition: none;
+  }
+}
+
+@keyframes bio-wipe {
+  from {
+    clip-path: inset(0 0 100% 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+@keyframes bio-extend {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes bio-rise {
+  from {
+    transform: translateY(105%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes bio-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
