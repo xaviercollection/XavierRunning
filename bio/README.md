@@ -8,15 +8,15 @@ próprios. Nada aqui importa código da loja nem fala com Supabase.
 
 Tudo fica em [`config/site.ts`](config/site.ts), no objeto `LINKS`:
 
-| Botão          | Chave       | Formato esperado                                                        |
-| -------------- | ----------- | ----------------------------------------------------------------------- |
-| WHATSAPP       | `whatsapp`  | `https://wa.me/5583999999999` (55 + DDD + número, só dígitos)           |
-| INSTAGRAM      | `instagram` | `https://www.instagram.com/perfil/`                                     |
-| VISITAR A LOJA | `location`  | link "Compartilhar" do Google Maps (`https://maps.app.goo.gl/...`)      |
+| Botão           | Chave       | Destino atual                                                | Formato aceito                                                     |
+| --------------- | ----------- | ------------------------------------------------------------ | ------------------------------------------------------------------ |
+| EXPLORAR A LOJA | `store`     | `https://loja.xaviercollection.com.br/`                      | só a loja (mesma aba)                                              |
+| WHATSAPP        | `whatsapp`  | `https://wa.me/558388933979`                                 | `https://wa.me/` + 55 + DDD + número, só dígitos                   |
+| INSTAGRAM       | `instagram` | `https://www.instagram.com/xaviercollection2/`               | `https://www.instagram.com/perfil/`                                |
+| VISITAR A LOJA  | `location`  | `https://maps.google.com/?q=Rua+Solon+de+Lucena+26+Arara`    | Google Maps (`maps.google.com`, `google.com/maps`, `maps.app.goo.gl`) |
 
-Os valores atuais contêm `SUBSTITUIR` de propósito. Enquanto algum link tiver esse marcador, o build
-publica normalmente e escreve um aviso no log. Se um link for trocado por algo fora do formato acima,
-o build falha antes de publicar — assim um botão quebrado nunca vai ao ar.
+Se um link for trocado por algo fora do formato acima, o build falha antes de publicar — assim um botão
+quebrado nunca vai ao ar. WhatsApp, Instagram e mapa abrem em nova aba.
 
 Os textos da página (marca, slogan, apoio e rodapé) estão no mesmo arquivo, em `COPY`.
 

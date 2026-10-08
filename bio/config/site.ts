@@ -1,9 +1,6 @@
 // Configuração central da bio (xaviercollection.com.br): todo texto e todo link da página saem daqui.
-// Para ativar WhatsApp, Instagram e localização, troque SÓ as três URLs com "SUBSTITUIR" em LINKS.
+// Para trocar um destino, edite só LINKS; o build confere o formato de cada link antes de publicar.
 // Sem imports de propósito: este arquivo também é lido pelo next.config.ts e pelos testes no Node.
-
-/** Marcador dos links ainda não definidos. Enquanto algum link contiver isto, o build avisa no log. */
-export const PLACEHOLDER = "SUBSTITUIR";
 
 export const SITE_URL = "https://xaviercollection.com.br";
 
@@ -17,12 +14,12 @@ export const COPY = {
 export const LINKS = {
   /** Loja online. Não mudar: é o domínio atual da loja. */
   store: "https://loja.xaviercollection.com.br/",
-  /** Formato: https://wa.me/5583999999999 (55 + DDD + número, só dígitos). */
-  whatsapp: "https://wa.me/SUBSTITUIR_NUMERO_WHATSAPP",
+  /** +55 (83) 8893-3979. Formato: https://wa.me/ + 55 + DDD + número, só dígitos. */
+  whatsapp: "https://wa.me/558388933979",
   /** Formato: https://www.instagram.com/perfil/ */
-  instagram: "https://www.instagram.com/SUBSTITUIR_PERFIL_INSTAGRAM/",
-  /** Formato: link "Compartilhar" do Google Maps (https://maps.app.goo.gl/...) ou https://www.google.com/maps/... */
-  location: "https://www.google.com/maps/search/?api=1&query=SUBSTITUIR_ENDERECO_DA_LOJA",
+  instagram: "https://www.instagram.com/xaviercollection2/",
+  /** Rua Sólon de Lucena, 26 — Arara. Formato: link do Google Maps (maps.google.com, google.com/maps ou maps.app.goo.gl). */
+  location: "https://maps.google.com/?q=Rua+Solon+de+Lucena+26+Arara",
 } as const;
 
 export type LinkId = keyof typeof LINKS;
@@ -51,21 +48,7 @@ const LINK_FORMATS: Record<LinkId, RegExp> = {
     /^https:\/\/(maps\.app\.goo\.gl\/|goo\.gl\/maps\/|(www\.)?google\.com(\.br)?\/maps[/?]|maps\.google\.com(\.br)?\/)/,
 };
 
-export function isPlaceholder(href: string): boolean {
-  return href.includes(PLACEHOLDER);
-}
-
-/**
- * Confere os links antes do build. `pending` são os que ainda têm placeholder (só aviso);
- * `invalid` são os que foram trocados por algo fora do formato esperado (o build falha).
- */
-export function auditLinks(links: Record<LinkId, string> = LINKS): { pending: LinkId[]; invalid: LinkId[] } {
-  const pending: LinkId[] = [];
-  const invalid: LinkId[] = [];
-  for (const id of Object.keys(LINK_FORMATS) as LinkId[]) {
-    const href = links[id];
-    if (isPlaceholder(href)) pending.push(id);
-    else if (!LINK_FORMATS[id].test(href)) invalid.push(id);
-  }
-  return { pending, invalid };
+/** Links fora do formato esperado. O next.config.ts derruba o build se a lista não vier vazia. */
+export function invalidLinks(links: Record<LinkId, string> = LINKS): LinkId[] {
+  return (Object.keys(LINK_FORMATS) as LinkId[]).filter((id) => !LINK_FORMATS[id].test(links[id]));
 }
