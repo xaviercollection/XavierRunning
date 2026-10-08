@@ -44,8 +44,9 @@ const LINK_FORMATS: Record<LinkId, RegExp> = {
   store: /^https:\/\/loja\.xaviercollection\.com\.br\/$/,
   whatsapp: /^https:\/\/wa\.me\/\d{12,15}(\?.*)?$/,
   instagram: /^https:\/\/(www\.)?instagram\.com\/[A-Za-z0-9._]+\/?$/,
+  // Exige um local depois do domínio: "https://maps.google.com/" sozinho não abre endereço nenhum.
   location:
-    /^https:\/\/(maps\.app\.goo\.gl\/|goo\.gl\/maps\/|(www\.)?google\.com(\.br)?\/maps[/?]|maps\.google\.com(\.br)?\/)/,
+    /^https:\/\/(maps\.app\.goo\.gl\/|goo\.gl\/maps\/|(www\.)?google\.com(\.br)?\/maps[/?]|maps\.google\.com(\.br)?\/)\S+$/,
 };
 
 /** Links fora do formato esperado. O next.config.ts derruba o build se a lista não vier vazia. */

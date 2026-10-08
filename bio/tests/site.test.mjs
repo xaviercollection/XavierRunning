@@ -67,6 +67,8 @@ test("invalidLinks rejeita link mal preenchido", () => {
   );
   assert.deepEqual(invalidLinks({ ...LINKS, whatsapp: "https://wa.me/8388933979" }), ["whatsapp"]);
   assert.deepEqual(invalidLinks({ ...LINKS, whatsapp: "https://wa.me/SUBSTITUIR_NUMERO_WHATSAPP" }), ["whatsapp"]);
+  assert.deepEqual(invalidLinks({ ...LINKS, location: "https://maps.google.com/" }), ["location"]);
+  assert.deepEqual(invalidLinks({ ...LINKS, location: "https://www.google.com/maps/" }), ["location"]);
 });
 
 test("invalidLinks aceita os outros formatos comuns de cada destino", () => {
