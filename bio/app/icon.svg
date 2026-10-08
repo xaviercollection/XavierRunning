@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Mesmo X Didone de components/Monogram.tsx; o contorno engrossa os fios para ler em 16px. -->
+  <rect width="64" height="64" fill="#050505"/>
+  <svg x="14.6" y="10" width="34.8" height="44" viewBox="10 8 98 124" fill="#f4f1ea" stroke="#f4f1ea" stroke-width="3" stroke-linejoin="miter">
+    <polygon points="22,14 46,14 98,126 74,126"/>
+    <polygon points="78,14 82,14 26,126 22,126"/>
+    <polygon points="14,10 54,10 54,14 14,14"/>
+    <polygon points="68,10 92,10 92,14 68,14"/>
+    <polygon points="12,126 36,126 36,130 12,130"/>
+    <polygon points="66,126 106,126 106,130 66,130"/>
+  </svg>
+</svg>
